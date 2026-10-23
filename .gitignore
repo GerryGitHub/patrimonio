@@ -1,0 +1,31 @@
+# Variables de entorno reales
+.env
+.env.*
+!.env.example
+
+# Volcados y copias de seguridad de la base
+*.sql
+# ...excepto el DDL documentado del esquema y la revisión
+!db/esquema.sql
+!docs/schema-review.sql
+!docs/schema-change-proposal.sql
+!docs/schema-change-proposal-v2.sql
+*.dump
+*.backup
+backups/
+dumps/
+
+# Datos locales / temporales
+data/
+*.log
+
+# Artefactos generados
+*.zip
+*.tar.gz
+
+# Editores y sistema operativo
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

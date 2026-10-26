@@ -19,6 +19,13 @@ dumps/
 data/
 *.log
 
+# Gradle
+.gradle/
+build/
+/out/
+*.class
+.kotlin/
+
 # Artefactos generados
 *.zip
 *.tar.gz

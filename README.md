@@ -1,13 +1,17 @@
-# Patrimonio — Base de datos PostgreSQL
+# Patrimonio — Base de datos PostgreSQL y backend
 
 Infraestructura de base de datos para el proyecto **Patrimonio**: un único
 contenedor PostgreSQL 16 gestionado con Docker Compose, más el esquema inicial de
-20 tablas aplicado directamente con `psql`.
+20 tablas aplicado directamente con `psql`. Incluye además el bootstrap del
+backend en Spring Boot sobre Java 25.
 
-Estado actual: **solo base de datos**. No hay backend, API ni frontend, y no se
-usa ningún sistema de migraciones (nada de Flyway ni Liquibase). El DDL aplicado
-está en `db/esquema.sql`; en `docs/` viven la revisión y las propuestas de
-evolución (aún **no aplicadas**).
+Estado actual: **base de datos y primer módulo funcional del backend**. La base
+PostgreSQL contiene el esquema inicial de 20 tablas y el módulo `cuentas`
+expone una consulta de solo lectura de cuentas financieras por portafolio. No
+hay todavía frontend ni autenticación/autorización, y no se usa ningún sistema
+de migraciones (nada de Flyway ni Liquibase). El DDL aplicado está en
+`db/esquema.sql`; en `docs/` viven la revisión y las propuestas de evolución
+(aún **no aplicadas**).
 
 ## Estructura
 
@@ -17,7 +21,10 @@ patrimonio/
 ├── .env.example         # Plantilla de variables de entorno (sin credenciales reales)
 ├── .env                 # Tus credenciales reales (ignorado por git, no se versiona)
 ├── db/esquema.sql       # DDL aplicado en la base
-├── docs/                # Revisión y propuestas de evolución
+├── docs/                # Revisión, propuestas, bootstrap y documentación de módulos
+├── src/                 # Backend Spring Boot (main, test, integrationTest)
+├── build.gradle.kts     # Build Gradle Kotlin DSL
+├── gradlew / gradlew.bat
 ├── .gitignore
 └── README.md
 ```
@@ -31,10 +38,47 @@ patrimonio/
 | `docs/er-diagram.md` | Diagrama ER actual y diagrama objetivo propuesto |
 | `docs/schema-change-proposal.md` / `.sql` | Propuesta v1 de cambios (no aplicada) |
 | `docs/schema-change-proposal-v2.md` / `.sql` | Propuesta v2 corregida (no aplicada) |
+| `docs/backend-bootstrap.md` | Stack, perfiles, variables de entorno, pruebas y comandos del backend |
+| `docs/cuentas-financieras.md` | Endpoint de consulta de cuentas, arquitectura, mapeo, pruebas y limitación de seguridad |
 
 > Las propuestas son documentación de diseño: **no se han ejecutado** contra la
 > base. El esquema vigente es el de `db/esquema.sql`.
 
+## Backend
+
+El backend usa Java 25, Spring Boot 4.1.2 y Gradle Kotlin DSL. La configuración
+completa (perfiles, variables de entorno y aislamiento de pruebas) está en
+[`docs/backend-bootstrap.md`](docs/backend-bootstrap.md).
+
+Comandos principales (Windows: `gradlew.bat`; Linux/macOS: `./gradlew`):
+
+```bash
+./gradlew compileJava       # compilar
+./gradlew test              # unitarias y arquitectura (sin Docker)
+./gradlew integrationTest   # integración con PostgreSQL 16 aislado
+./gradlew build             # build completo
+./gradlew jacocoMergedReport # cobertura combinada (HTML/XML)
+```
+
+Las pruebas de integración usan Testcontainers y nunca la base de desarrollo.
+Las reglas de arquitectura se verifican con ArchUnit y la cobertura se genera con
+JaCoCo. El detalle está en
+[`docs/cuentas-financieras.md`](docs/cuentas-financieras.md).
+
+### API actual (solo desarrollo local)
+
+```http
+GET /api/v1/portafolios/{portafolioId}/cuentas
+```
+
+Devuelve las cuentas financieras del portafolio indicado. Un portafolio
+inexistente responde `404`; un UUID inválido, `400`; un portafolio sin cuentas,
+`200` con `[]`.
+
+> **Seguridad pendiente.** No hay autenticación ni autorización y no se comprueba
+> la membresía del usuario en el portafolio. El endpoint no debe exponerse
+> públicamente ni usarse en producción. Detalles en
+> [`docs/cuentas-financieras.md`](docs/cuentas-financieras.md).
 
 ## Esquema de datos
 

@@ -1,6 +1,10 @@
 # Normaliza finales de línea en el repositorio (LF), sin alterar el árbol de trabajo.
 * text=auto eol=lf
 
+# Scripts del wrapper de Gradle
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+
 *.png binary
 *.jpg binary
 *.jpeg binary

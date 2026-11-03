@@ -15,4 +15,13 @@ public interface PasswordHasher {
      *     lanza excepciones por credenciales incorrectas
      */
     boolean coincide(String passwordEnClaro, String hash);
+
+    /**
+     * Genera un hash adaptativo con sal incorporada.
+     *
+     * <p>La contraseña en claro no se almacena ni se registra. El caso de uso
+     * comprueba antes las reglas de longitud para no pasar valores que el
+     * algoritmo truncaría.</p>
+     */
+    String hashear(String passwordEnClaro);
 }

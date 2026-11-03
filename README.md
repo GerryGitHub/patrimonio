@@ -72,6 +72,7 @@ Autenticación (disponible en todos los perfiles):
 
 ```http
 GET  /api/auth/csrf
+POST /api/auth/registro
 POST /api/auth/login
 GET  /api/auth/me
 POST /api/auth/logout
@@ -83,6 +84,11 @@ Portafolios y cuentas (requieren sesión):
 GET /api/v1/portafolios
 GET /api/v1/portafolios/{portafolioId}/cuentas
 ```
+
+El registro (`POST /api/auth/registro`) es público pero exige CSRF, normaliza
+nombre y correo, guarda la contraseña como hash BCrypt y responde `201` con la
+identidad mínima. **No crea sesión**: el cliente debe iniciar sesión después.
+Un correo duplicado responde `409 EMAIL_DUPLICADO`.
 
 La autenticación usa una sesión de servidor con cookie `HttpOnly`
 `PATRIMONIO_SESSION` y un token CSRF en la cabecera `X-XSRF-TOKEN`. El login

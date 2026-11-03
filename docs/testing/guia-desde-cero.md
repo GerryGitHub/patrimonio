@@ -3,15 +3,16 @@
 > Esta guía usa una base PostgreSQL **desechable**. No ejecutes estos pasos
 > contra la base local ni contra el contenedor `patrimonio-postgres`.
 >
-> Estado actual del MVP: **no hay endpoint de registro de usuarios ni CRUD de
-> portafolios, cuentas o productos**. Los usuarios y los datos se crean con SQL;
-> la API solo permite autenticarse y consultar portafolios y cuentas.
+> Estado actual del MVP: **hay registro de usuarios, pero no CRUD de
+> portafolios, cuentas o productos**. Los datos de demostración se crean con
+> SQL; la API permite registrarse, autenticarse y consultar portafolios y
+> cuentas.
 
 ## 0. Qué existe y qué no
 
 | Quiero... | ¿Hay endpoint? | Cómo se hace |
 |-----------|----------------|--------------|
-| Crear un usuario | No | `INSERT INTO usuario` con hash BCrypt |
+| Crear un usuario | Sí | `POST /api/auth/registro` (o `INSERT INTO usuario` con hash BCrypt) |
 | Iniciar sesión | Sí | `POST /api/auth/login` |
 | Consultar mi identidad | Sí | `GET /api/auth/me` |
 | Cerrar sesión | Sí | `POST /api/auth/logout` |

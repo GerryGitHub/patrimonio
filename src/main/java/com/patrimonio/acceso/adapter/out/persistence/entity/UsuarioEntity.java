@@ -43,6 +43,30 @@ public class UsuarioEntity {
         // Constructor requerido por JPA.
     }
 
+    /**
+     * Crea una cuenta activa con las fechas de auditoría actuales.
+     *
+     * <p>El identificador se genera en la aplicación para poder devolverlo sin
+     * depender de una lectura posterior. El hash ya debe venir calculado.</p>
+     */
+    public static UsuarioEntity nuevo(
+        UUID id,
+        String nombre,
+        String email,
+        String passwordHash
+    ) {
+        UsuarioEntity usuario = new UsuarioEntity();
+        Instant ahora = Instant.now();
+        usuario.id = id;
+        usuario.nombre = nombre;
+        usuario.email = email;
+        usuario.passwordHash = passwordHash;
+        usuario.activo = true;
+        usuario.fechaCreacion = ahora;
+        usuario.fechaActualizacion = ahora;
+        return usuario;
+    }
+
     public UUID getId() {
         return id;
     }

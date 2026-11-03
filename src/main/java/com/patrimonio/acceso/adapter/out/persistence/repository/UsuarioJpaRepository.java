@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Repositorio de solo lectura de usuarios.
+ * Repositorio de usuarios para autenticación y registro.
  */
 public interface UsuarioJpaRepository extends JpaRepository<UsuarioEntity, UUID> {
 
@@ -18,4 +18,6 @@ public interface UsuarioJpaRepository extends JpaRepository<UsuarioEntity, UUID>
         where lower(u.email) = :email
         """)
     Optional<UsuarioEntity> buscarPorEmail(@Param("email") String email);
+
+    boolean existsByEmailIgnoreCase(String email);
 }

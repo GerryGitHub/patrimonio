@@ -3,7 +3,9 @@ package com.patrimonio.acceso.adapter.in.web;
 import com.patrimonio.acceso.adapter.in.security.SesionExpiracionFilter;
 import com.patrimonio.acceso.api.dto.UsuarioAutenticado;
 import com.patrimonio.acceso.application.command.AutenticarUsuarioCommand;
+import com.patrimonio.acceso.application.command.RegistrarUsuarioCommand;
 import com.patrimonio.acceso.application.port.in.AutenticarUsuarioUseCase;
+import com.patrimonio.acceso.application.port.in.RegistrarUsuarioUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -44,6 +46,7 @@ public class AuthController {
     private static final String MECANISMO = "SESSION";
 
     private final AutenticarUsuarioUseCase autenticarUsuario;
+    private final RegistrarUsuarioUseCase registrarUsuario;
     private final SecurityContextRepository securityContextRepository;
     private final CsrfTokenRepository csrfTokenRepository;
     private final Duration tiempoInactividad;
@@ -51,6 +54,7 @@ public class AuthController {
 
     public AuthController(
         AutenticarUsuarioUseCase autenticarUsuario,
+        RegistrarUsuarioUseCase registrarUsuario,
         SecurityContextRepository securityContextRepository,
         CsrfTokenRepository csrfTokenRepository,
         @Value("${server.servlet.session.timeout:30m}") Duration tiempoInactividad,
@@ -58,6 +62,7 @@ public class AuthController {
         Duration duracionMaxima
     ) {
         this.autenticarUsuario = autenticarUsuario;
+        this.registrarUsuario = registrarUsuario;
         this.securityContextRepository = securityContextRepository;
         this.csrfTokenRepository = csrfTokenRepository;
         this.tiempoInactividad = tiempoInactividad;
@@ -96,6 +101,26 @@ public class AuthController {
             tiempoInactividad.toSeconds(),
             duracionMaxima.toSeconds(),
             csrf.getToken()));
+    }
+
+    /**
+     * Crea una cuenta sin iniciar sesión.
+     *
+     * <p>La respuesta es {@code 201 Created} con la identidad mínima. No se
+     * crea sesión ni se emite cookie de autenticación: el cliente debe pasar
+     * por {@code POST /api/auth/login}. Así el registro y el acceso quedan
+     * desacoplados y el comportamiento es explícito para web y móvil.</p>
+     */
+    @PostMapping("/registro")
+    @ResponseStatus(HttpStatus.CREATED)
+    public UsuarioResponse registro(
+        @Valid @RequestBody RegistroRequest request
+    ) {
+        return UsuarioResponse.from(registrarUsuario.execute(
+            new RegistrarUsuarioCommand(
+                request.nombre(),
+                request.email(),
+                request.password())));
     }
 
     @GetMapping("/me")

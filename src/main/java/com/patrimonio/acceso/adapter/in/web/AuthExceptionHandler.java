@@ -1,6 +1,8 @@
 package com.patrimonio.acceso.adapter.in.web;
 
 import com.patrimonio.acceso.application.error.CredencialesInvalidasException;
+import com.patrimonio.acceso.application.error.EmailDuplicadoException;
+import com.patrimonio.acceso.application.error.RegistroInvalidoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -32,6 +34,22 @@ public class AuthExceptionHandler {
             HttpStatus.UNAUTHORIZED,
             "NO_AUTENTICADO",
             "Credenciales inválidas.");
+    }
+
+    @ExceptionHandler(EmailDuplicadoException.class)
+    public ProblemDetail handleEmailDuplicado(EmailDuplicadoException ex) {
+        return problem(
+            HttpStatus.CONFLICT,
+            ex.codigo(),
+            ex.getMessage());
+    }
+
+    @ExceptionHandler(RegistroInvalidoException.class)
+    public ProblemDetail handleRegistroInvalido(RegistroInvalidoException ex) {
+        return problem(
+            HttpStatus.BAD_REQUEST,
+            ex.codigo(),
+            ex.getMessage());
     }
 
     @ExceptionHandler({
@@ -70,6 +88,7 @@ public class AuthExceptionHandler {
             case 400 -> "Solicitud inválida";
             case 401 -> "No autenticado";
             case 403 -> "Acceso denegado";
+            case 409 -> "Conflicto";
             case 500 -> "Error interno";
             default -> "Error HTTP";
         };

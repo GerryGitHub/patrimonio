@@ -24,4 +24,13 @@ public class BCryptPasswordHasher implements PasswordHasher {
         }
         return encoder.matches(passwordEnClaro, hash);
     }
+
+    @Override
+    public String hashear(String passwordEnClaro) {
+        if (passwordEnClaro == null || passwordEnClaro.isBlank()) {
+            throw new IllegalArgumentException(
+                "La contraseña no puede estar vacía.");
+        }
+        return encoder.encode(passwordEnClaro);
+    }
 }

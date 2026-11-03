@@ -2,10 +2,11 @@
 
 > Documento de la fase de seguridad del MVP. Fecha: 2026-10-30.
 >
-> Implementa el inicio y cierre de sesión, la revocación de credenciales, la
-> autorización por membresía y la protección de los endpoints de portafolios y
-> cuentas. No modifica el esquema PostgreSQL, no crea usuarios ni recuperación
-> de contraseña y no introduce migraciones automáticas.
+> Implementa el registro de usuarios, el inicio y cierre de sesión, la
+> revocación de credenciales, la autorización por membresía y la protección de
+> los endpoints de portafolios y cuentas. No modifica el esquema PostgreSQL, no
+> incluye recuperación de contraseña ni verificación de correo y no introduce
+> migraciones automáticas.
 
 ## 1. Estrategia elegida
 
@@ -73,7 +74,53 @@ JavaScript (`HttpOnly=false`) a propósito: el patrón *double-submit* necesita
 que el cliente copie su valor a la cabecera. El token CSRF no autentica por sí
 solo.
 
-### 2.2 `POST /api/auth/login`
+### 2.2 `POST /api/auth/registro`
+
+Crea una cuenta de usuario. Es público, pero exige el token CSRF porque
+modifica estado.
+
+```http
+POST /api/auth/registro
+Content-Type: application/json
+X-XSRF-TOKEN: <token de la cookie XSRF-TOKEN>
+
+{
+  "nombre": "María Pérez",
+  "email": "maria@example.com",
+  "password": "Secreta123!"
+}
+```
+
+Respuesta `201 Created`:
+
+```json
+{
+  "id": "99999999-9999-4999-8999-999999999999",
+  "email": "maria@example.com",
+  "nombre": "María Pérez"
+}
+```
+
+El nombre y el correo se recortan; el correo se convierte a minúsculas antes de
+comprobar duplicados y persistir. La contraseña debe tener entre 8 y 72 bytes
+UTF-8 (límite de BCrypt) y se guarda únicamente como hash.
+
+**El registro no crea sesión ni emite la cookie `PATRIMONIO_SESSION`.** El
+cliente debe llamar después a `POST /api/auth/login`. Así el alta y el acceso
+quedan desacoplados y el comportamiento es explícito para web y móvil.
+
+Errores:
+
+| Situación | HTTP | `code` |
+|-----------|------|--------|
+| Correo ya registrado (incluida la carrera entre comprobación e inserción) | `409` | `EMAIL_DUPLICADO` |
+| Nombre, correo o contraseña inválidos; JSON mal formado | `400` | `VALIDACION_ENTRADA` |
+| Falta el token CSRF o no coincide | `403` | `ACCESO_DENEGADO` |
+
+La respuesta de duplicado no repite el correo enviado. El registro tampoco
+devuelve contraseña, hash ni identificadores de sesión.
+
+### 2.3 `POST /api/auth/login`
 
 Verifica las credenciales y crea la sesión.
 
@@ -120,7 +167,7 @@ Los tres casos de credenciales fallidas devuelven exactamente la misma
 respuesta. No se distingue entre usuario inexistente, contraseña incorrecta y
 cuenta inactiva.
 
-### 2.3 `GET /api/auth/me`
+### 2.4 `GET /api/auth/me`
 
 Devuelve la identidad de la sesión actual.
 
@@ -140,7 +187,7 @@ Respuesta `200 OK`:
 
 Sin sesión válida responde `401 NO_AUTENTICADO`.
 
-### 2.4 `POST /api/auth/logout`
+### 2.5 `POST /api/auth/logout`
 
 Invalida la sesión actual y elimina la cookie CSRF. Es idempotente: si no hay
 sesión, también responde `204 No Content`.
@@ -154,7 +201,7 @@ Después del cierre, una petición con la cookie de sesión antigua recibe `401`
 El endpoint es público para que el cliente pueda cerrar sesión aunque su sesión
 ya haya caducado; la operación solo afecta a la sesión presentada.
 
-### 2.5 `GET /api/v1/portafolios`
+### 2.6 `GET /api/v1/portafolios`
 
 Lista los portafolios activos sobre los que el usuario autenticado tiene
 membresía. La identidad se toma del contexto de seguridad, nunca de un
@@ -179,7 +226,7 @@ Respuesta `200 OK`:
 La consulta exige usuario activo, portafolio activo y membresía. El orden es
 `nombre ASC, id ASC`. Sin membresías devuelve `[]`.
 
-### 2.6 `GET /api/v1/portafolios/{portafolioId}/cuentas`
+### 2.7 `GET /api/v1/portafolios/{portafolioId}/cuentas`
 
 Lista las cuentas del portafolio si el usuario tiene membresía y permiso de
 lectura.
@@ -293,8 +340,9 @@ cookie solo viaja por HTTPS. En local sobre HTTP se deja en `false` mediante
   no autentica.
 - El contrato limita `usuario` a 254 caracteres y `password` a 72, el máximo
   útil de BCrypt.
-- No hay registro, recuperación de contraseña, cambio de contraseña ni usuario
-  administrador en esta fase.
+- El registro público crea usuarios con hash BCrypt. No hay recuperación ni
+  cambio de contraseña, verificación de correo ni usuario administrador en esta
+  fase.
 
 ## 7. Autorización por membresía
 
@@ -520,8 +568,10 @@ efímeros; no se conectaron a la base local.
   existe y está activo; un atacante con mediciones muy precisas podría inferir
   la existencia o el estado de una cuenta. La respuesta HTTP sí es idéntica.
 - **Sin MFA.** No hay segundo factor.
-- **Sin registro, recuperación ni cambio de contraseña.** Los usuarios se crean
-  fuera de la aplicación.
+- **Sin recuperación, cambio de contraseña ni verificación de correo.** El
+  registro público crea la cuenta directamente, sin confirmar que el correo
+  pertenece a quien se registra. Debe añadirse verificación y recuperación antes
+  de producción.
 - **Sesiones en memoria.** Un reinicio invalida todas las sesiones. El escalado
   horizontal requiere sesiones pegajosas o Spring Session con un almacén
   compartido.

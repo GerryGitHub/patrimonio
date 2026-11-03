@@ -5,13 +5,13 @@ contenedor PostgreSQL 16 gestionado con Docker Compose, más el esquema inicial 
 20 tablas aplicado directamente con `psql`. Incluye además el bootstrap del
 backend en Spring Boot sobre Java 25.
 
-Estado actual: **base de datos y primer módulo funcional del backend**. La base
+Estado actual: **base de datos y backend con seguridad MVP**. La base
 PostgreSQL contiene el esquema inicial de 20 tablas y el módulo `cuentas`
-expone una consulta de solo lectura de cuentas financieras por portafolio. No
-hay todavía frontend ni autenticación/autorización, y no se usa ningún sistema
-de migraciones (nada de Flyway ni Liquibase). El DDL aplicado está en
-`db/esquema.sql`; en `docs/` viven la revisión y las propuestas de evolución
-(aún **no aplicadas**).
+expone una consulta de solo lectura de cuentas financieras por portafolio,
+protegida por sesión de servidor y autorización por membresía. No hay todavía
+frontend ni registro de usuarios, y no se usa ningún sistema de migraciones
+(nada de Flyway ni Liquibase). El DDL aplicado está en `db/esquema.sql`; en
+`docs/` viven la revisión y las propuestas de evolución (aún **no aplicadas**).
 
 ## Estructura
 
@@ -40,6 +40,7 @@ patrimonio/
 | `docs/schema-change-proposal-v2.md` / `.sql` | Propuesta v2 corregida (no aplicada) |
 | `docs/backend-bootstrap.md` | Stack, perfiles, variables de entorno, pruebas y comandos del backend |
 | `docs/cuentas-financieras.md` | Endpoint de consulta de cuentas, arquitectura, mapeo, pruebas y limitación de seguridad |
+| `docs/seguridad-autenticacion.md` | Estrategia de sesión, CSRF, autorización por membresía, pruebas y limitaciones |
 
 > Las propuestas son documentación de diseño: **no se han ejecutado** contra la
 > base. El esquema vigente es el de `db/esquema.sql`.
@@ -65,20 +66,57 @@ Las reglas de arquitectura se verifican con ArchUnit y la cobertura se genera co
 JaCoCo. El detalle está en
 [`docs/cuentas-financieras.md`](docs/cuentas-financieras.md).
 
-### API actual (solo desarrollo local)
+### API actual
+
+Autenticación (disponible en todos los perfiles):
 
 ```http
+GET  /api/auth/csrf
+POST /api/auth/login
+GET  /api/auth/me
+POST /api/auth/logout
+```
+
+Portafolios y cuentas (requieren sesión):
+
+```http
+GET /api/v1/portafolios
 GET /api/v1/portafolios/{portafolioId}/cuentas
 ```
 
-Devuelve las cuentas financieras del portafolio indicado. Un portafolio
-inexistente responde `404`; un UUID inválido, `400`; un portafolio sin cuentas,
-`200` con `[]`.
+La autenticación usa una sesión de servidor con cookie `HttpOnly`
+`PATRIMONIO_SESSION` y un token CSRF en la cabecera `X-XSRF-TOKEN`. El login
+responde `401` genérico para credenciales incorrectas, usuario inexistente o
+usuario inactivo. La autorización se resuelve por membresía: sin membresía,
+portafolio inexistente o inactivo, la respuesta es `404`; con membresía sin
+permiso de lectura, `403`.
 
-> **Seguridad pendiente.** No hay autenticación ni autorización y no se comprueba
-> la membresía del usuario en el portafolio. El endpoint no debe exponerse
-> públicamente ni usarse en producción. Detalles en
-> [`docs/cuentas-financieras.md`](docs/cuentas-financieras.md).
+El endpoint de cuentas devuelve el número enmascarado (`****` + últimos cuatro
+caracteres). Solo se registra si el perfil `local` o `test` está activo de forma
+**explícita** y `patrimonio.api.cuentas.expuesta=true`. Un arranque sin perfil
+no lo expone, aunque Spring aplique el perfil por defecto `local` y la propiedad
+valga `true` en ese perfil.
+
+Para habilitarlo en desarrollo local:
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=local'
+# o bien
+SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
+```
+
+En `prod` el endpoint de cuentas responde `404` y el arranque falla si se fuerza
+`patrimonio.api.cuentas.expuesta=true`.
+
+Los detalles de la estrategia, el ciclo de sesión, CSRF, la autorización y las
+pruebas están en
+[`docs/seguridad-autenticacion.md`](docs/seguridad-autenticacion.md). La
+colección Postman, la guía de ejecución y los datos de prueba manuales están en
+`docs/testing/`:
+[`patrimonio-auth.postman_collection.json`](docs/testing/patrimonio-auth.postman_collection.json),
+[`postman-guia.md`](docs/testing/postman-guia.md) y
+[`guia-desde-cero.md`](docs/testing/guia-desde-cero.md), que recorre el flujo
+completo desde una base vacía (crear usuario, login y datos con SQL).
 
 ## Esquema de datos
 

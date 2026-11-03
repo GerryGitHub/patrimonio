@@ -1,5 +1,6 @@
 package com.patrimonio.cuentas.adapter.in.web;
 
+import com.patrimonio.shared.domain.error.AccesoDenegadoException;
 import com.patrimonio.shared.domain.error.DatosPersistidosInvalidos;
 import com.patrimonio.shared.domain.error.DomainException;
 import com.patrimonio.shared.domain.error.NotFoundException;
@@ -8,9 +9,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
-import org.springframework.web.ErrorResponse;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
@@ -18,8 +21,10 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
  * {@link ProblemDetail} con un código estable.
  *
  * <p>El alcance se limita al controlador de cuentas para no interferir con el
- * manejo por defecto de otros módulos. Los detalles internos y las trazas nunca
- * se exponen en la respuesta.</p>
+ * manejo por defecto de otros módulos. Los detalles internos, las trazas y los
+ * valores financieros nunca se exponen en la respuesta; solo se registran en
+ * el log del servidor. Los mensajes devueltos al cliente son fijos y no
+ * incluyen el valor de los parámetros ni datos de la base.</p>
  */
 @RestControllerAdvice(basePackageClasses = CuentaFinancieraController.class)
 public class CuentaFinancieraExceptionHandler {
@@ -29,10 +34,23 @@ public class CuentaFinancieraExceptionHandler {
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ProblemDetail handleIdentificadorInvalido(MethodArgumentTypeMismatchException ex) {
+        // Solo se usa el nombre del parámetro, nunca su valor.
         return problem(
             HttpStatus.BAD_REQUEST,
             "ID_INVALIDO",
             "El parámetro '" + ex.getName() + "' no tiene un formato válido.");
+    }
+
+    @ExceptionHandler({
+        MethodArgumentNotValidException.class,
+        HandlerMethodValidationException.class,
+        HttpMessageNotReadableException.class
+    })
+    public ProblemDetail handleSolicitudInvalida(Exception ex) {
+        return problem(
+            HttpStatus.BAD_REQUEST,
+            "VALIDACION_ENTRADA",
+            "La solicitud no cumple el formato esperado.");
     }
 
     @ExceptionHandler(NotFoundException.class)
@@ -40,8 +58,14 @@ public class CuentaFinancieraExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, ex.codigo(), ex.getMessage());
     }
 
+    @ExceptionHandler(AccesoDenegadoException.class)
+    public ProblemDetail handleAccesoDenegado(AccesoDenegadoException ex) {
+        return problem(HttpStatus.FORBIDDEN, ex.codigo(), ex.getMessage());
+    }
+
     @ExceptionHandler(DatosPersistidosInvalidos.class)
     public ProblemDetail handleDatosInconsistentes(DatosPersistidosInvalidos ex) {
+        // La traza queda en el log; el cliente recibe un mensaje genérico.
         log.error("Datos persistidos inconsistentes al consultar cuentas", ex);
         return problem(
             HttpStatus.INTERNAL_SERVER_ERROR,
@@ -54,16 +78,15 @@ public class CuentaFinancieraExceptionHandler {
         return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.codigo(), ex.getMessage());
     }
 
+    /**
+     * Red de seguridad de último recurso.
+     *
+     * <p>No sustituye el manejo específico: cualquier fallo de programación se
+     * registra con su traza completa para diagnóstico y el cliente recibe un
+     * mensaje genérico sin detalles internos.</p>
+     */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleErrorInesperado(Exception ex) {
-        if (ex instanceof ErrorResponse errorResponse) {
-            ProblemDetail body = errorResponse.getBody();
-            if (body.getProperties() == null || !body.getProperties().containsKey("code")) {
-                body.setProperty("code", codigoPara(errorResponse.getStatusCode()));
-            }
-            return body;
-        }
-
         log.error("Error no controlado al consultar cuentas", ex);
         return problem(
             HttpStatus.INTERNAL_SERVER_ERROR,
@@ -85,23 +108,14 @@ public class CuentaFinancieraExceptionHandler {
     private static String tituloPara(HttpStatusCode status) {
         return switch (status.value()) {
             case 400 -> "Solicitud inválida";
+            case 403 -> "Acceso denegado";
             case 404 -> "Recurso no encontrado";
             case 405 -> "Método no permitido";
+            case 406 -> "Tipo de respuesta no soportado";
+            case 415 -> "Tipo de contenido no soportado";
             case 422 -> "Regla de negocio incumplida";
             case 500 -> "Error interno";
             default -> "Error HTTP";
-        };
-    }
-
-    private static String codigoPara(HttpStatusCode status) {
-        return switch (status.value()) {
-            case 400 -> "VALIDACION_ENTRADA";
-            case 404 -> "NO_ENCONTRADO";
-            case 405 -> "METODO_NO_PERMITIDO";
-            case 406 -> "TIPO_RESPUESTA_NO_SOPORTADO";
-            case 415 -> "TIPO_CONTENIDO_NO_SOPORTADO";
-            case 500 -> "ERROR_INTERNO";
-            default -> "ERROR_HTTP";
         };
     }
 }

@@ -2,6 +2,9 @@ spring:
   application:
     name: patrimonio
   profiles:
+    # Perfil por defecto solo para la infraestructura de desarrollo local
+    # (datasource, logging). NO habilita el endpoint de cuentas: el controlador
+    # exige que el perfil 'local' o 'test' este activo de forma explicita.
     default: local
   jpa:
     open-in-view: false
@@ -16,5 +19,33 @@ spring:
     init:
       mode: never
 
+patrimonio:
+  api:
+    cuentas:
+      # El endpoint de cuentas solo se registra si esta propiedad es true.
+      # Debe permanecer en false en produccion hasta que existan autenticacion
+      # y autorizacion verificables por membresia.
+      expuesta: false
+  seguridad:
+    sesion:
+      # Limite absoluto de la sesion autenticada, independiente de la
+      # inactividad. El contenedor aplica ademas el timeout de abajo.
+      duracion-maxima: 8h
+
 server:
   port: ${SERVER_PORT:8080}
+  servlet:
+    session:
+      # Tiempo de inactividad de la sesion de servidor.
+      timeout: 30m
+      cookie:
+        name: PATRIMONIO_SESSION
+        http-only: true
+        same-site: lax
+        # En produccion debe ser true; en local sobre HTTP se deja false.
+        secure: ${SESSION_COOKIE_SECURE:false}
+  error:
+    # Nunca devolver mensajes, trazas ni excepciones internas al cliente.
+    include-message: never
+    include-stacktrace: never
+    include-exception: false

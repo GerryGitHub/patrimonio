@@ -1,5 +1,6 @@
 package com.patrimonio.testsupport;
 
+import java.time.Duration;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -27,6 +28,7 @@ public final class PostgresTestContainer {
             .withDatabaseName(BASE_DE_DATOS)
             .withUsername(USUARIO)
             .withPassword(CONTRASENA)
+            .withStartupTimeout(Duration.ofMinutes(3))
             .withInitScript("esquema.sql");
     }
 }

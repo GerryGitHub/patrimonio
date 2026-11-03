@@ -76,13 +76,14 @@ patrimonio/
 
 | Perfil | Uso | `ddl-auto` | Datasource |
 | ------ | --- | ---------- | ---------- |
-| `local` (por defecto) | Desarrollo en la máquina | `validate` | PostgreSQL de desarrollo vía variables de entorno |
+| `local` | Desarrollo en la máquina (perfil por defecto de infraestructura) | `validate` | PostgreSQL de desarrollo vía variables de entorno |
 | `test` | Pruebas de integración | `validate` | Inyectado por Testcontainers (`@ServiceConnection`) |
 | `prod` | Producción | `none` | PostgreSQL vía variables de entorno |
 
 `application.yml` define los valores comunes:
 
-- `spring.profiles.default: local`
+- `spring.profiles.default: local` (solo para la infraestructura local:
+  datasource y logging; no habilita el endpoint de cuentas)
 - `spring.jpa.open-in-view: false`
 - `spring.jpa.generate-ddl: false`
 - `spring.jpa.hibernate.ddl-auto: none` como valor base seguro
@@ -101,6 +102,35 @@ patrimonio/
   propuestas revisadas (ver `docs/architecture/persistence-strategy.md`).
 
 No se usa Flyway, Liquibase ni ningún equivalente.
+
+### Exposición de la API de cuentas
+
+`application.yml` define `patrimonio.api.cuentas.expuesta: false`.
+`application-local.yml` y `application-test.yml` activan la propiedad, pero el
+controlador exige además un perfil de desarrollo **explícitamente activo**:
+
+- `PerfilDeDesarrolloExplicito` solo lo registra si `local` o `test` aparece en
+  `Environment.getActiveProfiles()`.
+- `@ConditionalOnProperty(patrimonio.api.cuentas.expuesta=true)` exige la
+  propiedad.
+
+`@Profile` no se usa para esta puerta porque considera activo el perfil por
+defecto (`spring.profiles.default=local`). Por eso, un arranque **sin perfil**
+no registra el controlador y la ruta responde `404`, aunque el perfil por
+defecto sea `local` y `application-local.yml` tenga `expuesta: true`.
+
+Para habilitarlo en local:
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=local'
+```
+
+En `prod` la propiedad es `false` y `CuentasApiExposicionGuard` falla el arranque
+si alguien intenta ponerla a `true`.
+
+Esto no es autenticación: el endpoint sigue sin identidad ni autorización por
+membresía y solo debe usarse en desarrollo local y pruebas. Ver
+[`cuentas-financieras.md`](cuentas-financieras.md).
 
 ## 4. Variables de entorno
 
@@ -158,6 +188,14 @@ $env:POSTGRES_PASSWORD = "tu_contrasena_local"
   API core en lugar de `archunit-junit6` porque el motor de ArchUnit depende de
   JUnit Platform 6.1.x y el BOM de Boot 4.1.2 administra JUnit 6.0.3.
 - El detalle está en [`cuentas-financieras.md`](cuentas-financieras.md).
+- La Fase 3.1 añade `EnmascaradorNumeroCuentaTest`,
+  `CuentasApiExposicionGuardTest` y `CuentaFinancieraApiNoExpuestaTest`: máscara
+  de números largos, cortos, vacíos y nulos, bloqueo de arranque en `prod` y
+  ausencia del controlador en `prod`.
+- La corrección del perfil por defecto añade `CuentaFinancieraApiSinPerfilTest`
+  (sin perfil explícito el controlador no se registra, incluso con
+  `expuesta=true`) y `CuentaFinancieraApiLocalTest` (con perfil `local`
+  explícito y la propiedad habilitada, el controlador se registra y responde).
 
 ### 5.2 Integración (`src/integrationTest`)
 
@@ -182,6 +220,10 @@ $env:POSTGRES_PASSWORD = "tu_contrasena_local"
   de prueba crea el suyo para aislar datos.
 - El contenedor se destruye al terminar; no persiste datos ni volúmenes del
   proyecto.
+
+- `CuentaFinancieraApiIT` verifica además que la respuesta HTTP solo contiene la
+  máscara (`****` + últimos cuatro caracteres) y que la entidad JPA conserva el
+  valor completo para uso interno.
 
 Requisito: Docker en marcha para las pruebas de integración. Las unitarias no lo
 necesitan. Si Docker no está disponible, `integrationTest` falla y no se debe

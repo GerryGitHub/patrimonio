@@ -7,41 +7,52 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.patrimonio.cuentas.adapter.out.persistence.entity.CuentaFinancieraEntity;
 import com.patrimonio.cuentas.adapter.out.persistence.repository.CuentaFinancieraJpaRepository;
+import com.patrimonio.testsupport.CsrfTestSupport;
 import com.patrimonio.testsupport.PostgresTestContainer;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Pruebas de extremo a extremo del endpoint de cuentas.
+ * Pruebas de extremo a extremo del endpoint de cuentas con autenticación y
+ * autorización por membresía.
  *
- * <p>Arrancan el contexto completo de Spring, el adaptador REST, el caso de uso
- * y la persistencia JPA contra un PostgreSQL 16 efímero de Testcontainers. No
- * se mockea ningún puerto y no se usa la base de desarrollo.</p>
+ * <p>Arrancan el contexto completo de Spring, la seguridad, el adaptador REST,
+ * el caso de uso y la persistencia JPA contra un PostgreSQL 16 efímero de
+ * Testcontainers. No se mockea ningún puerto y no se usa la base de
+ * desarrollo.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Testcontainers
+@ExtendWith(OutputCaptureExtension.class)
 class CuentaFinancieraApiIT {
 
     @Container
@@ -49,6 +60,10 @@ class CuentaFinancieraApiIT {
     static final PostgreSQLContainer POSTGRESQL = PostgresTestContainer.nuevo();
 
     private static final String RUTA = "/api/v1/portafolios/{portafolioId}/cuentas";
+    private static final String USUARIO_EMAIL = "titular@example.com";
+    private static final String USUARIO_PASSWORD = "Demo1234!";
+    private static final String PASSWORD_HASH =
+        new BCryptPasswordEncoder().encode(USUARIO_PASSWORD);
 
     @Autowired
     private MockMvc mockMvc;
@@ -62,6 +77,7 @@ class CuentaFinancieraApiIT {
     private UUID monedaId;
     private UUID institucionId;
     private UUID tipoCuentaId;
+    private UUID usuarioId;
 
     @BeforeEach
     void prepararCatalogos() {
@@ -78,13 +94,17 @@ class CuentaFinancieraApiIT {
         jdbcTemplate.update(
             "insert into tipo_cuenta (id, nombre) values (?, ?)",
             tipoCuentaId, "Corriente");
+
+        usuarioId = crearUsuario(USUARIO_EMAIL, true);
     }
 
     @AfterEach
     void limpiarDatosDePrueba() {
         // Orden inverso a las claves foráneas y solo dentro del contenedor.
+        jdbcTemplate.update("delete from membresia");
         jdbcTemplate.update("delete from cuenta_financiera");
         jdbcTemplate.update("delete from portafolio");
+        jdbcTemplate.update("delete from usuario");
         jdbcTemplate.update("delete from institucion");
         jdbcTemplate.update("delete from tipo_cuenta");
         jdbcTemplate.update("delete from moneda");
@@ -92,8 +112,11 @@ class CuentaFinancieraApiIT {
 
     @Test
     void listar_devuelveSoloLasCuentasDelPortafolioYElContratoCompleto() throws Exception {
-        UUID portafolioA = crearPortafolio("Portafolio A");
-        UUID portafolioB = crearPortafolio("Portafolio B");
+        UUID portafolioA = crearPortafolio("Portafolio A", true);
+        UUID portafolioB = crearPortafolio("Portafolio B", true);
+        crearMembresia(usuarioId, portafolioA);
+        crearMembresia(usuarioId, portafolioB);
+        MockHttpSession sesion = iniciarSesion();
 
         UUID cuentaAhorro = insertarCuenta(
             portafolioA, "Ahorro", "ES91 2100 0418 4502 0005 1332",
@@ -118,15 +141,14 @@ class CuentaFinancieraApiIT {
         assertThat(entidad.getFechaCierre()).isNull();
 
         // Entidad/dominio -> DTO de respuesta, filtrado por portafolio.
-        mockMvc.perform(get(RUTA, portafolioA))
+        mockMvc.perform(get(RUTA, portafolioA).session(sesion))
             .andExpect(status().isOk())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$", hasSize(2)))
             .andExpect(jsonPath("$[*].id",
                 contains(cuentaAhorro.toString(), cuentaCorriente.toString())))
             .andExpect(jsonPath("$[0].nombre").value("Ahorro"))
-            .andExpect(jsonPath("$[0].numeroCuenta")
-                .value("ES91 2100 0418 4502 0005 1332"))
+            .andExpect(jsonPath("$[0].numeroCuenta").value("****1332"))
             .andExpect(jsonPath("$[0].institucionId").value(institucionId.toString()))
             .andExpect(jsonPath("$[0].tipoCuentaId").value(tipoCuentaId.toString()))
             .andExpect(jsonPath("$[0].monedaId").value(monedaId.toString()))
@@ -142,10 +164,11 @@ class CuentaFinancieraApiIT {
             .andExpect(jsonPath("$[0].portafolioId").doesNotExist())
             .andExpect(jsonPath("$[0].hibernateLazyInitializer").doesNotExist())
             .andExpect(content().string(not(containsString(cuentaAjena.toString()))))
-            .andExpect(content().string(not(containsString("Cuenta ajena"))));
+            .andExpect(content().string(not(containsString("Cuenta ajena"))))
+            .andExpect(content().string(not(containsString("ES91 2100"))));
 
         // El otro portafolio devuelve únicamente su propia cuenta.
-        mockMvc.perform(get(RUTA, portafolioB))
+        mockMvc.perform(get(RUTA, portafolioB).session(sesion))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(1)))
             .andExpect(jsonPath("$[0].id").value(cuentaAjena.toString()))
@@ -153,13 +176,29 @@ class CuentaFinancieraApiIT {
     }
 
     @Test
+    void listar_cuandoElNumeroEsCorto_loEnmascaraCompletamente() throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio con número corto", true);
+        crearMembresia(usuarioId, portafolio);
+        MockHttpSession sesion = iniciarSesion();
+        insertarCuenta(portafolio, "Cuenta corta", "123", true, null, null);
+
+        mockMvc.perform(get(RUTA, portafolio).session(sesion))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(1)))
+            .andExpect(jsonPath("$[0].numeroCuenta").value("***"));
+    }
+
+    @Test
     void listar_cuandoElPortafolioNoTieneCuentas_devuelve200ConArrayVacio()
         throws Exception {
-        UUID portafolioVacio = crearPortafolio("Portafolio vacío");
-        UUID otroPortafolio = crearPortafolio("Portafolio con cuentas");
+        UUID portafolioVacio = crearPortafolio("Portafolio vacío", true);
+        UUID otroPortafolio = crearPortafolio("Portafolio con cuentas", true);
+        crearMembresia(usuarioId, portafolioVacio);
+        crearMembresia(usuarioId, otroPortafolio);
+        MockHttpSession sesion = iniciarSesion();
         insertarCuenta(otroPortafolio, "Cuenta", null, true, null, null);
 
-        mockMvc.perform(get(RUTA, portafolioVacio))
+        mockMvc.perform(get(RUTA, portafolioVacio).session(sesion))
             .andExpect(status().isOk())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$", hasSize(0)))
@@ -169,7 +208,9 @@ class CuentaFinancieraApiIT {
     @Test
     void listar_cuandoElIdentificadorNoEsUuid_devuelve400ProblemDetail()
         throws Exception {
-        mockMvc.perform(get(RUTA, "no-es-un-uuid"))
+        MockHttpSession sesion = iniciarSesion();
+
+        mockMvc.perform(get(RUTA, "no-es-un-uuid").session(sesion))
             .andExpect(status().isBadRequest())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.status").value(400))
@@ -181,9 +222,10 @@ class CuentaFinancieraApiIT {
     @Test
     void listar_cuandoElPortafolioNoExiste_devuelve404ProblemDetail()
         throws Exception {
+        MockHttpSession sesion = iniciarSesion();
         UUID portafolioInexistente = UUID.randomUUID();
 
-        mockMvc.perform(get(RUTA, portafolioInexistente))
+        mockMvc.perform(get(RUTA, portafolioInexistente).session(sesion))
             .andExpect(status().isNotFound())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.status").value(404))
@@ -193,12 +235,56 @@ class CuentaFinancieraApiIT {
     }
 
     @Test
-    void listar_cuandoLosDatosAlmacenadosSonIncoherentes_devuelve500SinDetalleInterno()
+    void listar_cuandoElUsuarioNoTieneMembresia_devuelve404SinRevelarElPortafolio()
         throws Exception {
-        UUID portafolio = crearPortafolio("Portafolio con datos corruptos");
-        insertarCuenta(portafolio, "   ", null, true, null, null);
+        UUID portafolioAjeno = crearPortafolio("Portafolio ajeno", true);
+        insertarCuenta(portafolioAjeno, "Cuenta ajena", null, true, null, null);
+        MockHttpSession sesion = iniciarSesion();
+
+        mockMvc.perform(get(RUTA, portafolioAjeno).session(sesion))
+            .andExpect(status().isNotFound())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.code").value("NO_ENCONTRADO"))
+            .andExpect(jsonPath("$.detail")
+                .value("No existe el portafolio indicado."))
+            .andExpect(content().string(not(containsString("Cuenta ajena"))));
+    }
+
+    @Test
+    void listar_cuandoElPortafolioEstaInactivo_devuelve404() throws Exception {
+        UUID portafolioInactivo = crearPortafolio("Portafolio inactivo", false);
+        crearMembresia(usuarioId, portafolioInactivo);
+        MockHttpSession sesion = iniciarSesion();
+
+        mockMvc.perform(get(RUTA, portafolioInactivo).session(sesion))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("NO_ENCONTRADO"));
+    }
+
+    @Test
+    void listar_sinSesion_devuelve401ProblemDetail() throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio A", true);
+        crearMembresia(usuarioId, portafolio);
 
         mockMvc.perform(get(RUTA, portafolio))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.status").value(401))
+            .andExpect(jsonPath("$.code").value("NO_AUTENTICADO"))
+            .andExpect(content().string(not(containsString("No existe"))));
+    }
+
+    @Test
+    void listar_cuandoLosDatosAlmacenadosSonIncoherentes_devuelve500SinDetalleInterno(
+        CapturedOutput output
+    ) throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio con datos corruptos", true);
+        crearMembresia(usuarioId, portafolio);
+        MockHttpSession sesion = iniciarSesion();
+        insertarCuenta(
+            portafolio, "   ", "ES91 2100 0418 4502 0005 1332", true, null, null);
+
+        mockMvc.perform(get(RUTA, portafolio).session(sesion))
             .andExpect(status().isInternalServerError())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.status").value(500))
@@ -206,14 +292,49 @@ class CuentaFinancieraApiIT {
             .andExpect(jsonPath("$.detail")
                 .value("Los datos almacenados no son coherentes."))
             .andExpect(content().string(not(containsString("invariantes"))))
-            .andExpect(content().string(not(containsString("CuentaFinanciera"))));
+            .andExpect(content().string(not(containsString("CuentaFinanciera"))))
+            .andExpect(content().string(not(containsString("ES91 2100"))));
+
+        assertThat(output.getAll())
+            .as("el número completo no debe aparecer en los logs")
+            .doesNotContain("ES91 2100");
     }
 
-    private UUID crearPortafolio(String nombre) {
+    private MockHttpSession iniciarSesion() throws Exception {
+        MvcResult resultado = mockMvc.perform(post("/api/auth/login")
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"usuario":"%s","password":"%s"}
+                    """.formatted(USUARIO_EMAIL, USUARIO_PASSWORD)))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        return (MockHttpSession) resultado.getRequest().getSession(false);
+    }
+
+    private UUID crearUsuario(String email, boolean activo) {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update(
-            "insert into portafolio (id, nombre, moneda_base_id) values (?, ?, ?)",
-            id, nombre, monedaId);
+        jdbcTemplate.update("""
+            insert into usuario (id, nombre, email, password_hash, activo)
+            values (?, ?, ?, ?, ?)
+            """, id, "Usuario de prueba", email, PASSWORD_HASH, activo);
+        return id;
+    }
+
+    private void crearMembresia(UUID usuario, UUID portafolio) {
+        jdbcTemplate.update("""
+            insert into membresia (id, usuario_id, portafolio_id, rol)
+            values (?, ?, ?, ?)
+            """, UUID.randomUUID(), usuario, portafolio, "LECTOR");
+    }
+
+    private UUID crearPortafolio(String nombre, boolean activo) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update("""
+            insert into portafolio (id, nombre, moneda_base_id, activo)
+            values (?, ?, ?, ?)
+            """, id, nombre, monedaId, activo);
         return id;
     }
 

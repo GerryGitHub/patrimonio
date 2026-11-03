@@ -107,7 +107,7 @@ nombra con verbo + sustantivo + `UseCase`. Vive en
 | Elemento | Convención |
 |----------|------------|
 | Nombre | `CrearPortafolioUseCase`, `RegistrarMovimientoUseCase`, `ValorarPosicionUseCase` |
-| Método | `ejecutar(Command)` para escrituras; `consultar(Query)` para lecturas |
+| Método | `execute(...)` en todo puerto de entrada; el tipo de entrada (`Command`/`Query`) distingue escritura de lectura |
 | Entrada | `record` inmutable en `application.command` o `application.query` |
 | Salida | Vista de aplicación (`application.view`) o un `Resultado` explícito; nunca una entidad JPA |
 | Errores | Excepciones de dominio/aplicación; no `ResponseEntity` ni códigos HTTP |
@@ -557,7 +557,7 @@ El detalle está en `testing-strategy.md`.
 2. **Validación de forma**: `@Valid` verifica campos obligatorios, longitudes y
    rangos simples.
 3. **Adaptador web**: convierte a `RegistrarMovimientoCommand` y llama a
-   `RegistrarMovimientoUseCase.ejecutar(...)`.
+   `RegistrarMovimientoUseCase.execute(...)`.
 4. **Servicio de aplicación** (`@Transactional`):
    - carga la posición con `PosicionRepository.buscarParaActualizar(id)`;
    - verifica que la posición esté activa y que la cuenta/instrumento/moneda

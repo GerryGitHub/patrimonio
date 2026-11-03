@@ -220,7 +220,7 @@ sequenceDiagram
 
     C->>W: POST /api/v1/posiciones/{id}/movimientos
     W->>W: validar DTO (Bean Validation)
-    W->>U: ejecutar(comando)
+    W->>U: execute(comando)
     U->>P: buscarParaActualizar(posicionId)
     P->>A: findByIdForUpdate(id)
     A->>DB: SELECT ... FOR UPDATE

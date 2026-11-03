@@ -9,3 +9,9 @@ spring:
   datasource:
     hikari:
       maximum-pool-size: 2
+
+patrimonio:
+  api:
+    cuentas:
+      # Las pruebas ejercitan el contrato HTTP completo.
+      expuesta: true

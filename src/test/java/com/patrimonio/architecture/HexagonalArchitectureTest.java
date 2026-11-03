@@ -140,4 +140,14 @@ class HexagonalArchitectureTest {
 
         regla.check(CLASES);
     }
+
+    @Test
+    void elAdaptadorWebNoDependeDeRepositoriosNiEntidadesJpa() {
+        ArchRule regla = noClasses().that().resideInAPackage("..adapter.in.web..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                "org.springframework.data..", "jakarta.persistence..")
+            .because("el controlador no debe acceder directamente a la persistencia");
+
+        regla.check(CLASES);
+    }
 }

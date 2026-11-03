@@ -6,13 +6,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.patrimonio.acceso.api.dto.PortafolioResumen;
-import com.patrimonio.acceso.api.port.PortafolioQueryPort;
+import com.patrimonio.acceso.api.dto.PermisoPortafolio;
+import com.patrimonio.acceso.api.port.AccesoQueryPort;
 import com.patrimonio.cuentas.application.port.out.CuentaFinancieraRepository;
 import com.patrimonio.cuentas.application.query.ListarCuentasPorPortafolioQuery;
 import com.patrimonio.cuentas.application.view.CuentaFinancieraView;
 import com.patrimonio.cuentas.domain.model.CuentaFinanciera;
 import com.patrimonio.cuentas.domain.model.NumeroCuenta;
+import com.patrimonio.shared.domain.error.AccesoDenegadoException;
 import com.patrimonio.shared.domain.error.DatosPersistidosInvalidos;
 import com.patrimonio.shared.domain.error.NotFoundException;
 import java.time.LocalDate;
@@ -31,6 +32,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class ListarCuentasPorPortafolioServiceTest {
 
+    private static final UUID USUARIO_ID =
+        UUID.fromString("99999999-9999-9999-9999-999999999999");
     private static final UUID PORTAFOLIO_ID =
         UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID INSTITUCION_ID =
@@ -41,7 +44,7 @@ class ListarCuentasPorPortafolioServiceTest {
         UUID.fromString("55555555-5555-5555-5555-555555555555");
 
     @Mock
-    private PortafolioQueryPort portafolioQueryPort;
+    private AccesoQueryPort accesoQueryPort;
 
     @Mock
     private CuentaFinancieraRepository cuentaFinancieraRepository;
@@ -51,11 +54,11 @@ class ListarCuentasPorPortafolioServiceTest {
     @BeforeEach
     void setUp() {
         service = new ListarCuentasPorPortafolioService(
-            portafolioQueryPort, cuentaFinancieraRepository);
+            accesoQueryPort, cuentaFinancieraRepository);
     }
 
     @Test
-    void consultar_cuandoPortafolioExiste_devuelveLasCuentasDelPuerto() {
+    void execute_cuandoElUsuarioTieneMembresia_devuelveLasCuentasDelPuerto() {
         CuentaFinanciera cuentaCorriente = cuenta(
             "11111111-aaaa-1111-1111-111111111111",
             "Cuenta corriente",
@@ -71,13 +74,12 @@ class ListarCuentasPorPortafolioServiceTest {
             null,
             null);
 
-        when(portafolioQueryPort.buscarPorId(PORTAFOLIO_ID))
-            .thenReturn(Optional.of(portafolio()));
+        when(accesoQueryPort.buscarPermiso(USUARIO_ID, PORTAFOLIO_ID))
+            .thenReturn(Optional.of(new PermisoPortafolio(PORTAFOLIO_ID, true)));
         when(cuentaFinancieraRepository.listarPorPortafolio(PORTAFOLIO_ID))
             .thenReturn(List.of(cuentaCorriente, cuentaAhorro));
 
-        List<CuentaFinancieraView> resultado = service.consultar(
-            new ListarCuentasPorPortafolioQuery(PORTAFOLIO_ID));
+        List<CuentaFinancieraView> resultado = service.execute(consulta());
 
         assertThat(resultado).hasSize(2);
         assertThat(resultado.get(0).id()).isEqualTo(cuentaCorriente.id());
@@ -92,25 +94,23 @@ class ListarCuentasPorPortafolioServiceTest {
     }
 
     @Test
-    void consultar_cuandoNoHayCuentas_devuelveListaVacia() {
-        when(portafolioQueryPort.buscarPorId(PORTAFOLIO_ID))
-            .thenReturn(Optional.of(portafolio()));
+    void execute_cuandoNoHayCuentas_devuelveListaVacia() {
+        when(accesoQueryPort.buscarPermiso(USUARIO_ID, PORTAFOLIO_ID))
+            .thenReturn(Optional.of(new PermisoPortafolio(PORTAFOLIO_ID, true)));
         when(cuentaFinancieraRepository.listarPorPortafolio(PORTAFOLIO_ID))
             .thenReturn(List.of());
 
-        List<CuentaFinancieraView> resultado = service.consultar(
-            new ListarCuentasPorPortafolioQuery(PORTAFOLIO_ID));
+        List<CuentaFinancieraView> resultado = service.execute(consulta());
 
         assertThat(resultado).isEmpty();
     }
 
     @Test
-    void consultar_cuandoPortafolioNoExiste_lanzaNotFound() {
-        when(portafolioQueryPort.buscarPorId(PORTAFOLIO_ID))
+    void execute_cuandoNoHayMembresia_lanzaNotFoundSinConsultarCuentas() {
+        when(accesoQueryPort.buscarPermiso(USUARIO_ID, PORTAFOLIO_ID))
             .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.consultar(
-            new ListarCuentasPorPortafolioQuery(PORTAFOLIO_ID)))
+        assertThatThrownBy(() -> service.execute(consulta()))
             .isInstanceOf(NotFoundException.class)
             .hasMessageContaining("portafolio");
 
@@ -118,41 +118,52 @@ class ListarCuentasPorPortafolioServiceTest {
     }
 
     @Test
-    void consultar_cuandoElPuertoDeCuentasFalla_propagaLaExcepcionDelContrato() {
+    void execute_cuandoLaMembresiaNoConcedeLectura_lanzaAccesoDenegado() {
+        when(accesoQueryPort.buscarPermiso(USUARIO_ID, PORTAFOLIO_ID))
+            .thenReturn(Optional.of(new PermisoPortafolio(PORTAFOLIO_ID, false)));
+
+        assertThatThrownBy(() -> service.execute(consulta()))
+            .isInstanceOfSatisfying(
+                AccesoDenegadoException.class,
+                ex -> assertThat(ex.codigo()).isEqualTo("ACCESO_DENEGADO"));
+
+        verifyNoInteractions(cuentaFinancieraRepository);
+    }
+
+    @Test
+    void execute_cuandoElPuertoDeCuentasFalla_propagaLaExcepcionDelContrato() {
         DatosPersistidosInvalidos fallo = new DatosPersistidosInvalidos("dato corrupto");
 
-        when(portafolioQueryPort.buscarPorId(PORTAFOLIO_ID))
-            .thenReturn(Optional.of(portafolio()));
+        when(accesoQueryPort.buscarPermiso(USUARIO_ID, PORTAFOLIO_ID))
+            .thenReturn(Optional.of(new PermisoPortafolio(PORTAFOLIO_ID, true)));
         when(cuentaFinancieraRepository.listarPorPortafolio(PORTAFOLIO_ID))
             .thenThrow(fallo);
 
-        assertThatThrownBy(() -> service.consultar(
-            new ListarCuentasPorPortafolioQuery(PORTAFOLIO_ID)))
+        assertThatThrownBy(() -> service.execute(consulta()))
             .isSameAs(fallo);
     }
 
     @Test
-    void consultar_cuandoElPuertoDePortafolioFalla_propagaLaExcepcion() {
+    void execute_cuandoElPuertoDeAccesoFalla_propagaLaExcepcion() {
         IllegalStateException fallo = new IllegalStateException("base no disponible");
 
-        when(portafolioQueryPort.buscarPorId(PORTAFOLIO_ID)).thenThrow(fallo);
+        when(accesoQueryPort.buscarPermiso(USUARIO_ID, PORTAFOLIO_ID))
+            .thenThrow(fallo);
 
-        assertThatThrownBy(() -> service.consultar(
-            new ListarCuentasPorPortafolioQuery(PORTAFOLIO_ID)))
+        assertThatThrownBy(() -> service.execute(consulta()))
             .isSameAs(fallo);
 
         verifyNoInteractions(cuentaFinancieraRepository);
     }
 
     @Test
-    void consultar_cuandoLaConsultaEsNula_falla() {
-        assertThatThrownBy(() -> service.consultar(null))
+    void execute_cuandoLaConsultaEsNula_falla() {
+        assertThatThrownBy(() -> service.execute(null))
             .isInstanceOf(NullPointerException.class);
     }
 
-    private static PortafolioResumen portafolio() {
-        return new PortafolioResumen(
-            PORTAFOLIO_ID, "Portafolio principal", MONEDA_ID, true);
+    private static ListarCuentasPorPortafolioQuery consulta() {
+        return new ListarCuentasPorPortafolioQuery(USUARIO_ID, PORTAFOLIO_ID);
     }
 
     private static CuentaFinanciera cuenta(

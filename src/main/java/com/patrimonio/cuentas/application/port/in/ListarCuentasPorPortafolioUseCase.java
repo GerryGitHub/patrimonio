@@ -16,5 +16,5 @@ public interface ListarCuentasPorPortafolioUseCase {
      * @throws com.patrimonio.shared.domain.error.NotFoundException si el
      *     portafolio no existe
      */
-    List<CuentaFinancieraView> consultar(ListarCuentasPorPortafolioQuery query);
+    List<CuentaFinancieraView> execute(ListarCuentasPorPortafolioQuery query);
 }

@@ -1,0 +1,1126 @@
+{
+  "info": {
+    "name": "Patrimonio · API MVP (auth, portafolios y cuentas)",
+    "description": "Colección para probar el MVP de autenticación y autorización de Patrimonio.\n\nQUÉ FUNCIONA\n- Sesión de servidor con cookie HttpOnly PATRIMONIO_SESSION.\n- CSRF con cookie XSRF-TOKEN y cabecera X-XSRF-TOKEN.\n- Login, logout, /me y listado de portafolios autorizados.\n- Consulta de cuentas con autorización por membresía y número enmascarado.\n- Casos negativos 400, 401, 403 y 404.\n\nQUÉ NO EXISTE\n- POST /api/auth/refresh: la estrategia de sesión no usa refresh tokens.\n- Registro, recuperación de contraseña, MFA ni usuario administrador.\n\nREQUISITOS\n- API en {{baseUrl}}.\n- Perfil local o test y patrimonio.api.cuentas.expuesta=true para el endpoint de cuentas.\n- Datos de docs/testing/datos-prueba-auth.sql cargados en una base DESECHABLE, nunca en la local.\n- Postman conserva las cookies. Si repites la colección, borra las cookies de {{baseUrl}} o ejecuta primero 99 · Cierre de sesión.\n\nORDEN RECOMENDADO\n00 → 01 → 02 → 03 → 04 → 99.\nCada carpeta indica sus dependencias. La carpeta 00 debe ejecutarse sin sesión; 01 crea la sesión del titular; 02 usa esa sesión; 03 prueba fallos de login; 04 cambia a un usuario sin membresías; 99 cierra la sesión.\n\nGUÍA\ndocs/testing/postman-guia.md contiene el paso a paso, la tabla de variables y la solución de problemas.\n\nVARIABLES\nLos scripts guardan automáticamente csrfToken y portafolioId. Las credenciales y los UUID corresponden a docs/testing/datos-prueba-auth.sql.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "description": "URL base de la API. Ajustar si el backend usa otro puerto u host."
+    },
+    {
+      "key": "usuario",
+      "value": "titular@example.com",
+      "description": "Usuario con rol PROPIETARIO del portafolio A."
+    },
+    {
+      "key": "password",
+      "value": "Demo1234!",
+      "description": "Contraseña ficticia del titular."
+    },
+    {
+      "key": "usuarioSinAcceso",
+      "value": "sin-acceso@example.com",
+      "description": "Usuario activo sin membresías."
+    },
+    {
+      "key": "passwordSinAcceso",
+      "value": "Editor1234!",
+      "description": "Contraseña ficticia del usuario sin membresías."
+    },
+    {
+      "key": "usuarioInactivo",
+      "value": "inactivo@example.com",
+      "description": "Usuario inactivo; el login debe devolver 401."
+    },
+    {
+      "key": "usuarioInexistente",
+      "value": "nadie@example.com",
+      "description": "Correo que no existe en la base de prueba."
+    },
+    {
+      "key": "csrfToken",
+      "value": "",
+      "description": "Token CSRF. Lo rellenan los scripts de GET /api/auth/csrf y login."
+    },
+    {
+      "key": "portafolioId",
+      "value": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "description": "Portafolio A, con membresía del titular."
+    },
+    {
+      "key": "portafolioAjenoId",
+      "value": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
+      "description": "Portafolio B, activo pero sin membresía del titular."
+    },
+    {
+      "key": "portafolioInactivoId",
+      "value": "cccccccc-cccc-4ccc-8ccc-ccccccccccc3",
+      "description": "Portafolio C, inactivo, con membresía del titular."
+    },
+    {
+      "key": "portafolioInexistenteId",
+      "value": "dddddddd-dddd-4ddd-8ddd-ddddddddddd4",
+      "description": "UUID válido que no existe en la base de prueba."
+    },
+    {
+      "key": "uuidInvalido",
+      "value": "no-es-un-uuid",
+      "description": "Valor que no cumple el formato UUID."
+    }
+  ],
+  "item": [
+    {
+      "name": "00 · Sin sesión",
+      "description": "Comprueba que los endpoints protegidos rechazan peticiones sin sesión. Ejecuta esta carpeta antes de iniciar sesión y con las cookies de {{baseUrl}} limpias. Resultado esperado: 401 NO_AUTENTICADO en los tres requests.",
+      "item": [
+        {
+          "name": "GET /api/auth/me sin sesión → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Petición sin cookie de sesión. Esperado: 401 con code NO_AUTENTICADO. No debe devolver datos del usuario."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 No autenticado', () => pm.response.to.have.status(401));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/v1/portafolios sin sesión → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios"
+              ]
+            },
+            "description": "Petición sin cookie de sesión. Esperado: 401 con code NO_AUTENTICADO. No debe devolver portafolios."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 No autenticado', () => pm.response.to.have.status(401));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET cuentas sin sesión → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios/{{portafolioId}}/cuentas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios",
+                "{{portafolioId}}",
+                "cuentas"
+              ]
+            },
+            "description": "Petición sin cookie de sesión. Esperado: 401 con code NO_AUTENTICADO. No debe devolver cuentas ni números enmascarados."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 No autenticado', () => pm.response.to.have.status(401));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 · Autenticación",
+      "description": "Obtiene el token CSRF, inicia sesión como titular@example.com y consulta la identidad. Al terminar, Postman tiene la cookie PATRIMONIO_SESSION y la variable csrfToken lista para las siguientes carpetas.",
+      "item": [
+        {
+          "name": "GET /api/auth/csrf",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/csrf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "csrf"
+              ]
+            },
+            "description": "Endpoint público. Devuelve headerName X-XSRF-TOKEN, parameterName _csrf y token. También establece la cookie XSRF-TOKEN. El script guarda el token en {{csrfToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('cabecera esperada', () => pm.expect(pm.response.json().headerName).to.eql('X-XSRF-TOKEN'));",
+                  "pm.test('token no vacío', () => {",
+                  "  const token = pm.response.json().token;",
+                  "  pm.expect(token).to.be.a('string');",
+                  "  pm.expect(token.length).to.be.above(0);",
+                  "});",
+                  "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Autentica a {{usuario}} con {{password}}. Requiere la cabecera X-XSRF-TOKEN. Esperado: 200 con mecanismo SESSION, usuario, expiraEnSegundos, duracionMaximaSegundos y csrfToken. El script guarda el token CSRF rotado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"{{usuario}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const cuerpo = pm.response.json();",
+                  "pm.test('mecanismo de sesión', () => pm.expect(cuerpo.mecanismo).to.eql('SESSION'));",
+                  "pm.test('no devuelve contraseña ni hash', () => {",
+                  "  pm.expect(JSON.stringify(cuerpo)).to.not.include('passwordHash');",
+                  "  pm.expect(JSON.stringify(cuerpo)).to.not.include('$2a$');",
+                  "});",
+                  "pm.test('devuelve expiración', () => {",
+                  "  pm.expect(cuerpo.expiraEnSegundos).to.be.above(0);",
+                  "  pm.expect(cuerpo.duracionMaximaSegundos).to.be.above(0);",
+                  "});",
+                  "pm.collectionVariables.set('csrfToken', cuerpo.csrfToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/auth/me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Requiere la cookie de sesión creada por el login. Esperado: 200 con id, email y nombre; sin password, hash ni roles internos."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const usuario = pm.response.json();",
+                  "pm.test('identidad del titular', () => pm.expect(usuario.email).to.eql(pm.collectionVariables.get('usuario')));",
+                  "pm.test('sin datos sensibles', () => {",
+                  "  pm.expect(usuario).to.not.have.property('password');",
+                  "  pm.expect(usuario).to.not.have.property('passwordHash');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 · Portafolios y cuentas",
+      "description": "Requiere la sesión de 01. Lista los portafolios autorizados, consulta las cuentas del primero y comprueba los 404 de portafolios ajeno, inactivo e inexistente, además del 400 de un UUID inválido. El primer request guarda el id del primer portafolio en {{portafolioId}}.",
+      "item": [
+        {
+          "name": "GET /api/v1/portafolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios"
+              ]
+            },
+            "description": "Requiere sesión. Devuelve solo portafolios activos con membresía, ordenados por nombre. Esperado: 200 con array; no incluye el portafolio ajeno ni el inactivo. El script guarda el primer id en {{portafolioId}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "pm.test('array de portafolios', () => pm.expect(lista).to.be.an('array'));",
+                  "pm.test('solo portafolios activos con membresía', () => {",
+                  "  const ids = lista.map((p) => p.id);",
+                  "  pm.expect(ids).to.not.include(pm.collectionVariables.get('portafolioAjenoId'));",
+                  "  pm.expect(ids).to.not.include(pm.collectionVariables.get('portafolioInactivoId'));",
+                  "});",
+                  "if (lista.length > 0) {",
+                  "  pm.collectionVariables.set('portafolioId', lista[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET cuentas del portafolio autorizado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios/{{portafolioId}}/cuentas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios",
+                "{{portafolioId}}",
+                "cuentas"
+              ]
+            },
+            "description": "Requiere sesión y membresía. Esperado: 200 con array de cuentas. numeroCuenta siempre debe estar enmascarado con **** y los últimos cuatro caracteres."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const cuentas = pm.response.json();",
+                  "pm.test('array de cuentas', () => pm.expect(cuentas).to.be.an('array'));",
+                  "pm.test('nunca expone el número completo', () => {",
+                  "  cuentas.forEach((cuenta) => {",
+                  "    if (cuenta.numeroCuenta !== null) {",
+                  "      pm.expect(cuenta.numeroCuenta).to.match(/^(\\*{4}[A-Za-z0-9]{4}|\\*+)$/);",
+                  "    }",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET cuentas de un portafolio ajeno → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios/{{portafolioAjenoId}}/cuentas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios",
+                "{{portafolioAjenoId}}",
+                "cuentas"
+              ]
+            },
+            "description": "El portafolio B existe y está activo, pero el titular no tiene membresía. Esperado: 404 NO_ENCONTRADO, igual que si el portafolio no existiera."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 sin revelar existencia', () => pm.response.to.have.status(404));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_ENCONTRADO'));",
+                  "pm.test('no revela el nombre del portafolio', () => pm.expect(pm.response.json().detail).to.not.include('Portafolio B'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET cuentas de un portafolio inactivo → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios/{{portafolioInactivoId}}/cuentas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios",
+                "{{portafolioInactivoId}}",
+                "cuentas"
+              ]
+            },
+            "description": "El portafolio C está inactivo y el titular tiene membresía. Esperado: 404 NO_ENCONTRADO; no se revela su existencia ni su nombre."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 sin revelar existencia', () => pm.response.to.have.status(404));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_ENCONTRADO'));",
+                  "pm.test('no revela el nombre del portafolio', () => pm.expect(pm.response.json().detail).to.not.include('Portafolio C'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET cuentas de un portafolio inexistente → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios/{{portafolioInexistenteId}}/cuentas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios",
+                "{{portafolioInexistenteId}}",
+                "cuentas"
+              ]
+            },
+            "description": "UUID válido que no existe en la base de prueba. Esperado: 404 NO_ENCONTRADO, con el mismo cuerpo que un portafolio sin membresía."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 sin revelar existencia', () => pm.response.to.have.status(404));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_ENCONTRADO'));",
+                  "pm.test('no revela el nombre del portafolio', () => pm.expect(pm.response.json().detail).to.not.include('Portafolio inexistente'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET cuentas con UUID inválido → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios/{{uuidInvalido}}/cuentas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios",
+                "{{uuidInvalido}}",
+                "cuentas"
+              ]
+            },
+            "description": "El path no es un UUID válido. Esperado: 400 con code ID_INVALIDO. No debe incluir el valor enviado ni detalles internos."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 ID inválido', () => pm.response.to.have.status(400));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('ID_INVALIDO'));",
+                  "pm.test('no refleja el valor enviado', () => pm.expect(pm.response.json().detail).to.not.include('no-es-un-uuid'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 · Casos negativos de login",
+      "description": "Obtiene un CSRF nuevo y prueba los fallos de login. No cierra la sesión de 01: los fallos no crean sesión. Resultado esperado: 401 genérico para credenciales inválidas, usuario inexistente o inactivo; 400 para cuerpos inválidos; 403 sin CSRF.",
+      "item": [
+        {
+          "name": "GET /api/auth/csrf (para casos negativos)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/csrf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "csrf"
+              ]
+            },
+            "description": "Obtiene un token válido para los POST de esta carpeta. No cambia la sesión actual. El script guarda el token en {{csrfToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST login con contraseña incorrecta → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Usuario existente con contraseña incorrecta. Esperado: 401 NO_AUTENTICADO, con el mismo cuerpo que usuario inexistente o inactivo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"{{usuario}}\",\n  \"password\": \"incorrecta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 genérico', () => pm.response.to.have.status(401));",
+                  "pm.test('mismo código que usuario inexistente', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));",
+                  "pm.test('no refleja la contraseña', () => pm.expect(pm.response.text()).to.not.include('incorrecta'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST login con usuario inexistente → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Correo que no existe. Esperado: 401 NO_AUTENTICADO, sin revelar si el correo está registrado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"{{usuarioInexistente}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 genérico', () => pm.response.to.have.status(401));",
+                  "pm.test('mismo código que credenciales inválidas', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));",
+                  "pm.test('no revela el correo', () => pm.expect(pm.response.text()).to.not.include('nadie@example.com'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST login con usuario inactivo → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Usuario existente pero inactivo. Esperado: 401 NO_AUTENTICADO, igual que una contraseña incorrecta.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"{{usuarioInactivo}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 genérico', () => pm.response.to.have.status(401));",
+                  "pm.test('mismo código que credenciales inválidas', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST login con cuerpo vacío → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Body {} sin usuario ni contraseña. Esperado: 400 VALIDACION_ENTRADA; no se autentica.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 validación', () => pm.response.to.have.status(400));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('VALIDACION_ENTRADA'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST login con JSON mal formado → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Body que no es JSON válido. Esperado: 400 VALIDACION_ENTRADA; no se autentica.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"usuario\": \"{{usuario}}\", \"password\": ",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 validación', () => pm.response.to.have.status(400));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('VALIDACION_ENTRADA'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST login sin CSRF → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "No envía la cabecera X-XSRF-TOKEN. Esperado: 403 ACCESO_DENEGADO; la operación no se ejecuta y no se crea sesión.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"{{usuario}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 sin token CSRF', () => pm.response.to.have.status(403));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('ACCESO_DENEGADO'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 · Usuario sin membresías",
+      "description": "Inicia sesión como sin-acceso@example.com (sin membresías) y comprueba que no ve portafolios y que recibe 404 al pedir las cuentas del portafolio A. Deja esa sesión activa para 99.",
+      "item": [
+        {
+          "name": "GET /api/auth/csrf (para usuario sin acceso)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/csrf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "csrf"
+              ]
+            },
+            "description": "Obtiene un token válido para el login de esta carpeta. El script guarda el token en {{csrfToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST login como usuario sin membresías",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Autentica a {{usuarioSinAcceso}} con {{passwordSinAcceso}}. Esperado: 200; el usuario existe y está activo, pero no tiene membresías. El script guarda el CSRF rotado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"{{usuarioSinAcceso}}\",\n  \"password\": \"{{passwordSinAcceso}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const cuerpo = pm.response.json();",
+                  "pm.test('mecanismo de sesión', () => pm.expect(cuerpo.mecanismo).to.eql('SESSION'));",
+                  "pm.test('identidad sin acceso', () => pm.expect(cuerpo.usuario.email).to.eql(pm.collectionVariables.get('usuarioSinAcceso')));",
+                  "pm.collectionVariables.set('csrfToken', cuerpo.csrfToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/v1/portafolios sin membresías → []",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios"
+              ]
+            },
+            "description": "Usuario autenticado sin membresías. Esperado: 200 con array vacío."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "pm.test('array vacío', () => pm.expect(lista.length).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET cuentas del portafolio A sin membresía → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios/{{portafolioId}}/cuentas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios",
+                "{{portafolioId}}",
+                "cuentas"
+              ]
+            },
+            "description": "El usuario sin membresías pide las cuentas del portafolio A. Esperado: 404 NO_ENCONTRADO; no se revela la existencia del portafolio."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 sin revelar existencia', () => pm.response.to.have.status(404));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_ENCONTRADO'));",
+                  "pm.test('no revela el nombre del portafolio', () => pm.expect(pm.response.json().detail).to.not.include('Portafolio A'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "99 · Cierre de sesión",
+      "description": "Cierra la sesión actual y verifica que /me devuelve 401. El logout es idempotente: si no hay sesión, también responde 204.",
+      "item": [
+        {
+          "name": "GET /api/auth/csrf (para logout)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/csrf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "csrf"
+              ]
+            },
+            "description": "Obtiene un token CSRF válido para el logout. Si no hay sesión, el logout sigue siendo idempotente y responde 204. El script guarda el token en {{csrfToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Requiere la cabecera X-XSRF-TOKEN. Esperado: 204 No Content. Invalida la sesión y borra la cookie CSRF. El script limpia {{csrfToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 sin contenido', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('csrfToken', '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/auth/me tras logout → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "La cookie de sesión ya no es válida. Esperado: 401 NO_AUTENTICADO."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 No autenticado', () => pm.response.to.have.status(401));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

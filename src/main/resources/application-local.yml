@@ -16,6 +16,12 @@ spring:
       hibernate:
         format_sql: true
 
+patrimonio:
+  api:
+    cuentas:
+      # Solo en desarrollo local: no hay autenticacion ni autorizacion reales.
+      expuesta: true
+
 logging:
   level:
     org.hibernate.SQL: debug

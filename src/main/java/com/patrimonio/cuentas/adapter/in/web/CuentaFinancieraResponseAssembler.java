@@ -6,6 +6,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * Convierte vistas de aplicación en DTOs de respuesta REST.
+ *
+ * <p>El número de cuenta se enmascara aquí, en el borde HTTP. El dominio y la
+ * persistencia conservan el valor completo para uso interno.</p>
  */
 @Component
 public class CuentaFinancieraResponseAssembler {
@@ -18,7 +21,7 @@ public class CuentaFinancieraResponseAssembler {
         return new CuentaFinancieraResponse(
             cuenta.id(),
             cuenta.nombre(),
-            cuenta.numeroCuenta(),
+            EnmascaradorNumeroCuenta.enmascarar(cuenta.numeroCuenta()),
             cuenta.institucionId(),
             cuenta.tipoCuentaId(),
             cuenta.monedaId(),

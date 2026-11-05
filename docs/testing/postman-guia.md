@@ -54,7 +54,11 @@ ejemplo se incluye para que el comando sea explícito.
    `docs/testing/patrimonio-auth.postman_collection.json`.
 3. Revisa la variable `baseUrl`. Si la API no está en `http://localhost:8080`,
    cámbiala en la pestaña `Variables` de la colección.
-4. No hace falta configurar autenticación en Postman: la sesión viaja en la
+4. El environment es opcional: la colección funciona sola con sus variables. Si
+   usas uno, no dupliques `csrfToken`, `portafolioId` ni los correos de
+   registro. Los scripts los sincronizan con el environment activo para que no
+   quede un valor viejo.
+5. No hace falta configurar autenticación en Postman: la sesión viaja en la
    cookie `PATRIMONIO_SESSION` y Postman la guarda automáticamente.
 
 ## 4. Variables
@@ -84,23 +88,30 @@ Los scripts actualizan `csrfToken` después de `GET /api/auth/csrf` y del login,
 `portafolioId` con el primer portafolio autorizado, y los correos de registro
 con valores únicos en cada ejecución de `00b`.
 
+`csrfToken`, `portafolioId`, `registroEmail`, `registroEmailInvalido` y
+`registroEmailSinCsrf` son variables gestionadas por la colección. Si hay un
+environment activo, los scripts las copian allí antes de cada request para que
+no quede un valor viejo. No las definas a mano en el environment; si ya existen,
+la colección las sobrescribe.
+
 ## 5. Orden de ejecución
 
 Ejecuta las carpetas en este orden:
 
 ```text
-00 → 00b → 01 → 02 → 03 → 04 → 99
+00 → 00b → 00c → 01 → 02 → 03 → 04 → 99
 ```
 
 | Orden | Carpeta | Dependencia | Qué comprueba |
 |-------|---------|-------------|---------------|
 | 1 | `00 · Sin sesión` | Cookies limpias | `401 NO_AUTENTICADO` en `/me`, portafolios y cuentas |
 | 2 | `00b · Registro de usuarios` | Sin sesión y antes de `01` | `201` sin sesión, `/me` 401, duplicado 409, validación 400 y 403 sin CSRF |
-| 3 | `01 · Autenticación` | Ninguna | CSRF, login del titular y `/me` |
-| 4 | `02 · Portafolios y cuentas` | Sesión de `01` | Portafolios autorizados, cuentas enmascaradas, 404 y 400 |
-| 5 | `03 · Casos negativos de login` | Ninguna (pide su propio CSRF) | 401 genérico, 400 de validación y 403 sin CSRF |
-| 6 | `04 · Usuario sin membresías` | Ninguna (pide su propio CSRF) | Lista vacía y 404 sin revelar el portafolio |
-| 7 | `99 · Cierre de sesión` | Sesión de `01` o `04` | CSRF, `204` en logout y `401` posterior en `/me` |
+| 3 | `00c · Login tras registro` | Usuario creado por `00b` | Login con `{{registroEmail}}`/`{{registroPassword}}`, `/me` 200 y logout 204 |
+| 4 | `01 · Autenticación` | Ninguna | CSRF, login del titular y `/me` |
+| 5 | `02 · Portafolios y cuentas` | Sesión de `01` | Portafolios autorizados, cuentas enmascaradas, 404 y 400 |
+| 6 | `03 · Casos negativos de login` | Ninguna (pide su propio CSRF) | 401 genérico, 400 de validación y 403 sin CSRF |
+| 7 | `04 · Usuario sin membresías` | Ninguna (pide su propio CSRF) | Lista vacía y 404 sin revelar el portafolio |
+| 8 | `99 · Cierre de sesión` | Sesión de `01` o `04` | CSRF, `204` en logout y `401` posterior en `/me` |
 
 ### Paso a paso
 
@@ -125,13 +136,22 @@ Ejecuta las carpetas en este orden:
    - Ejecuta esta carpeta sin sesión y antes de `01`. Si ya iniciaste sesión,
      `/me` devolverá `200` y la comprobación fallará.
 
-3. **`01 · Autenticación`**
+3. **`00c · Login tras registro`**
+   - Ejecuta `GET /api/auth/csrf (para login tras registro)` para obtener un
+     token y una cookie frescos. No reutilices el token de otra ejecución.
+   - `POST /api/auth/login con el usuario registrado` debe devolver `200` con
+     `mecanismo: "SESSION"` y el email de `{{registroEmail}}`.
+   - `GET /api/auth/me` debe devolver el mismo email.
+   - `POST /api/auth/logout` debe devolver `204` y el `/me` posterior `401`.
+   - Esta carpeta deja Postman sin sesión para que `01` autentique al titular.
+
+4. **`01 · Autenticación`**
    - Ejecuta `GET /api/auth/csrf`; el script guarda el token.
    - Ejecuta `POST /api/auth/login`; debe devolver `200` y guardar el token
      rotado.
    - Ejecuta `GET /api/auth/me`; debe devolver el email del titular.
 
-4. **`02 · Portafolios y cuentas`**
+5. **`02 · Portafolios y cuentas`**
    - Ejecuta `GET /api/v1/portafolios`; guarda el primer `id` en
      `{{portafolioId}}`.
    - Ejecuta las consultas de cuentas en orden.
@@ -141,20 +161,20 @@ Ejecuta las carpetas en este orden:
    - El portafolio ajeno, el inactivo y el inexistente deben devolver `404`.
    - El UUID inválido debe devolver `400` con `code: "ID_INVALIDO"`.
 
-5. **`03 · Casos negativos de login`**
+6. **`03 · Casos negativos de login`**
    - El primer request obtiene un CSRF nuevo.
    - Los tres primeros logins deben devolver `401` genérico.
    - El cuerpo vacío y el JSON mal formado deben devolver `400`.
    - El login sin cabecera CSRF debe devolver `403`.
    - Esta carpeta no cierra la sesión del titular.
 
-6. **`04 · Usuario sin membresías`**
+7. **`04 · Usuario sin membresías`**
    - El primer request obtiene un CSRF nuevo.
    - El login con `sin-acceso@example.com` debe devolver `200`.
    - `GET /api/v1/portafolios` debe devolver `[]`.
    - Las cuentas del portafolio A deben devolver `404`.
 
-7. **`99 · Cierre de sesión`**
+8. **`99 · Cierre de sesión`**
    - `GET /api/auth/csrf` obtiene un token válido para el logout.
    - `POST /api/auth/logout` debe devolver `204`.
    - `GET /api/auth/me` debe devolver `401`.
@@ -182,15 +202,22 @@ Opciones:
 - O usa una instancia nueva de Postman/una colección limpia.
 
 La carpeta `00b` genera un correo nuevo en cada ejecución, así que puedes
-repetirla sin chocar con el usuario registrado anteriormente. Los usuarios de
-prueba se acumulan en la base desechable.
+repetirla sin chocar con el usuario registrado anteriormente. `00c` inicia
+sesión con ese usuario y la cierra al final; los usuarios de prueba se acumulan
+en la base desechable.
+
+Si usas un environment, ejecuta cada carpeta desde su primer request. Los
+scripts sincronizan `csrfToken` y los correos de registro con el environment
+activo, pero no pueden arreglar una cookie de sesión o un token de otra ventana
+de Postman. Para el flujo registro → login usa `00c`, que pide un CSRF fresco.
 
 ## 8. Problemas frecuentes
 
 | Síntoma | Causa probable | Solución |
 |---------|----------------|----------|
 | `401` en todo, incluso tras login | No se guardó la cookie o el login falló | Revisa que el login devolvió `200`; comprueba `PATRIMONIO_SESSION` en Cookies |
-| `403` en registro, login o logout | Falta `X-XSRF-TOKEN` o el token no coincide | Ejecuta antes `GET /api/auth/csrf` y no borres la cookie `XSRF-TOKEN` |
+| `403` en registro, login o logout | Falta `X-XSRF-TOKEN`, el token no coincide o el environment tiene un `csrfToken` viejo | Ejecuta la carpeta desde su `GET /api/auth/csrf`; la colección sincroniza el token con el environment |
+| `403` al hacer login justo después del registro | Se reutilizó el token o la cookie de otra ejecución/ventana | Ejecuta `00c · Login tras registro` desde su primer request; pide un CSRF fresco |
 | `409` en el registro | El correo ya existe en la base de prueba | Ejecuta `00b` desde su primer request para generar un correo nuevo |
 | `404` en el endpoint de cuentas | Perfil sin `local`/`test` o `patrimonio.api.cuentas.expuesta=false` | Activa el perfil y la propiedad; reinicia el backend |
 | `404` en el portafolio A | Los datos de prueba no están cargados | Carga `datos-prueba-auth.sql` en una base desechable |
@@ -208,6 +235,9 @@ El script `docs/testing/datos-prueba-auth.sql`:
   usuarios, aborta.
 - Usa hashes BCrypt de contraseñas de demostración.
 - No debe ejecutarse contra la base local ni contra `patrimonio-postgres`.
+- Si ya ejecutaste `00b`/`00c`, la tabla `usuario` no está vacía y el script
+  aborta. Limpia los usuarios de prueba antes de cargar los datos de
+  demostración.
 
 Ejemplo con un contenedor efímero:
 
@@ -232,6 +262,8 @@ Después, arranca el backend apuntando a ese contenedor con las variables
 - El token CSRF sí es legible por el cliente; se envía en `X-XSRF-TOKEN`.
 - El registro es público pero exige CSRF y no crea sesión: después de registrar
   hay que pasar por el login.
+- `00c` prueba ese login con las mismas credenciales del registro y un CSRF
+  fresco, y luego cierra la sesión.
 - El registro devuelve solo `id`, `email` y `nombre`; nunca contraseña, hash ni
   token de sesión.
 - Un correo duplicado responde `409 EMAIL_DUPLICADO` sin repetir el correo en el

@@ -191,12 +191,13 @@ Testcontainers y no define `spring.datasource.url`.
 3. Ejecuta las carpetas en este orden:
 
    ```text
-   00 → 00b → 01 → 02 → 03 → 04 → 99
+   00 → 00b → 00c → 01 → 02 → 03 → 04 → 99
    ```
 
 4. `00b · Registro de usuarios` crea un usuario nuevo con un correo único y
-   comprueba que el registro no inicia sesión. Es opcional si solo quieres usar
-   los usuarios de demostración.
+   comprueba que el registro no inicia sesión. `00c · Login tras registro`
+   inicia sesión con esas mismas credenciales y cierra la sesión. Son opcionales
+   si solo quieres usar los usuarios de demostración.
 5. En `01 · Autenticación`, el login usa:
    - usuario: `titular@example.com`
    - contraseña: `Demo1234!`
@@ -335,5 +336,6 @@ El contenedor `patrimonio-postgres` no se toca en ningún paso.
 ```
 
 El registro de usuarios ya está disponible por HTTP, pero no crea sesión:
-después hay que hacer login. Los portafolios, las cuentas y los productos no
-tienen CRUD por HTTP en esta fase; se crean con SQL.
+después hay que hacer login con las mismas credenciales (la colección lo prueba
+en `00c`). Los portafolios, las cuentas y los productos no tienen CRUD por HTTP
+en esta fase; se crean con SQL.

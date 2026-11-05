@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Patrimonio · API MVP (auth, portafolios y cuentas)",
-    "description": "Colección para probar el MVP de autenticación y autorización de Patrimonio.\n\nQUÉ FUNCIONA\n- Sesión de servidor con cookie HttpOnly PATRIMONIO_SESSION.\n- CSRF con cookie XSRF-TOKEN y cabecera X-XSRF-TOKEN.\n- Registro público de usuarios con correo único; no crea sesión.\n- Login, logout, /me y listado de portafolios autorizados.\n- Consulta de cuentas con autorización por membresía y número enmascarado.\n- Casos negativos 400, 401, 403, 404 y 409.\n\nQUÉ NO EXISTE\n- POST /api/auth/refresh: la estrategia de sesión no usa refresh tokens.\n- Recuperación o cambio de contraseña, MFA ni usuario administrador.\n\nREQUISITOS\n- API en {{baseUrl}}.\n- Perfil local o test y patrimonio.api.cuentas.expuesta=true para el endpoint de cuentas.\n- Datos de docs/testing/datos-prueba-auth.sql cargados en una base DESECHABLE, nunca en la local.\n- Postman conserva las cookies. Si repites la colección, borra las cookies de {{baseUrl}} o ejecuta primero 99 · Cierre de sesión.\n\nORDEN RECOMENDADO\n00 → 00b → 01 → 02 → 03 → 04 → 99.\nCada carpeta indica sus dependencias. La carpeta 00 debe ejecutarse sin sesión; 00b registra un usuario con un correo único y comprueba que no hay sesión; 01 crea la sesión del titular; 02 usa esa sesión; 03 prueba fallos de login; 04 cambia a un usuario sin membresías; 99 cierra la sesión.\n\nGUÍA\ndocs/testing/postman-guia.md contiene el paso a paso, la tabla de variables y la solución de problemas.\n\nVARIABLES\nLos scripts guardan automáticamente csrfToken, portafolioId y los correos únicos de registro. Las credenciales y los UUID corresponden a docs/testing/datos-prueba-auth.sql.",
+    "description": "Colección para probar el MVP de autenticación y autorización de Patrimonio.\n\nQUÉ FUNCIONA\n- Sesión de servidor con cookie HttpOnly PATRIMONIO_SESSION.\n- CSRF con cookie XSRF-TOKEN y cabecera X-XSRF-TOKEN.\n- Registro público de usuarios con correo único; no crea sesión.\n- Login con las mismas credenciales del registro y cierre de sesión.\n- Login, logout, /me y listado de portafolios autorizados.\n- Consulta de cuentas con autorización por membresía y número enmascarado.\n- Casos negativos 400, 401, 403, 404 y 409.\n\nQUÉ NO EXISTE\n- POST /api/auth/refresh: la estrategia de sesión no usa refresh tokens.\n- Recuperación o cambio de contraseña, MFA ni usuario administrador.\n\nREQUISITOS\n- API en {{baseUrl}}.\n- Perfil local o test y patrimonio.api.cuentas.expuesta=true para el endpoint de cuentas.\n- Datos de docs/testing/datos-prueba-auth.sql cargados en una base DESECHABLE, nunca en la local.\n- Postman conserva las cookies. Si repites la colección, borra las cookies de {{baseUrl}} o ejecuta primero 99 · Cierre de sesión.\n\nORDEN RECOMENDADO\n00 → 00b → 00c → 01 → 02 → 03 → 04 → 99.\nLa carpeta 00 debe ejecutarse sin sesión; 00b registra un usuario con un correo único y comprueba que no hay sesión; 00c inicia sesión con esas mismas credenciales y cierra la sesión; 01 crea la sesión del titular; 02 usa esa sesión; 03 prueba fallos de login; 04 cambia a un usuario sin membresías; 99 cierra la sesión.\n\nENVIRONMENT\nLa colección funciona sola con sus variables. Si activas un environment, no dupliques csrfToken, portafolioId ni los correos de registro: los scripts los sincronizan con el environment para que no queden valores viejos. Las credenciales y los UUID de demostración son los de docs/testing/datos-prueba-auth.sql.\n\nGUÍA\ndocs/testing/postman-guia.md contiene el paso a paso, la tabla de variables y la solución de problemas.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -200,7 +200,7 @@
     },
     {
       "name": "00b · Registro de usuarios",
-      "description": "Registra un usuario nuevo con un correo único generado en cada ejecución y comprueba que el registro no crea sesión. Ejecuta esta carpeta sin sesión y antes de 01 · Autenticación. El usuario creado queda en la base de prueba; el correo cambia en cada ejecución para no chocar con intentos anteriores.",
+      "description": "Registra un usuario nuevo con un correo único generado en cada ejecución y comprueba que el registro no crea sesión. Ejecuta esta carpeta sin sesión y antes de 01 · Autenticación. La carpeta 00c inicia sesión con las mismas credenciales y cierra la sesión. El usuario creado queda en la base de prueba; el correo cambia en cada ejecución para no chocar con intentos anteriores.",
       "item": [
         {
           "name": "GET /api/auth/csrf (para registro)",
@@ -226,10 +226,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const guardar = (clave, valor) => {",
+                  "  pm.collectionVariables.set(clave, valor);",
+                  "  if (pm.environment.name) pm.environment.set(clave, valor);",
+                  "};",
                   "const sello = Date.now() + '.' + Math.floor(Math.random() * 100000);",
-                  "pm.collectionVariables.set('registroEmail', 'postman.' + sello + '@example.com');",
-                  "pm.collectionVariables.set('registroEmailInvalido', 'postman.invalido.' + sello + '@example.com');",
-                  "pm.collectionVariables.set('registroEmailSinCsrf', 'postman.sin-csrf.' + sello + '@example.com');"
+                  "guardar('registroEmail', 'postman.' + sello + '@example.com');",
+                  "guardar('registroEmailInvalido', 'postman.invalido.' + sello + '@example.com');",
+                  "guardar('registroEmailSinCsrf', 'postman.sin-csrf.' + sello + '@example.com');"
                 ]
               }
             },
@@ -482,6 +486,207 @@
                 "exec": [
                   "pm.test('403 sin token CSRF', () => pm.response.to.have.status(403));",
                   "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('ACCESO_DENEGADO'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "00c · Login tras registro",
+      "description": "Inicia sesión con el usuario creado en 00b usando las mismas variables {{registroEmail}} y {{registroPassword}}, comprueba /me y cierra la sesión. Depende de 00b. Al terminar, Postman queda sin sesión para que 01 pueda autenticar al titular.",
+      "item": [
+        {
+          "name": "GET /api/auth/csrf (para login tras registro)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/csrf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "csrf"
+              ]
+            },
+            "description": "Obtiene un token CSRF fresco antes de iniciar sesión con el usuario registrado. Evita reutilizar un token viejo de otra ejecución o de un environment desincronizado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('cabecera esperada', () => pm.expect(pm.response.json().headerName).to.eql('X-XSRF-TOKEN'));",
+                  "const token = pm.response.json().token;",
+                  "pm.test('token no vacío', () => {",
+                  "  pm.expect(token).to.be.a('string');",
+                  "  pm.expect(token.length).to.be.above(0);",
+                  "});",
+                  "pm.collectionVariables.set('csrfToken', token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login con el usuario registrado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicia sesión con {{registroEmail}} y {{registroPassword}}, las mismas credenciales usadas en 00b. Esperado: 200 con mecanismo SESSION y el email registrado. El script guarda el token CSRF rotado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"{{registroEmail}}\",\n  \"password\": \"{{registroPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const cuerpo = pm.response.json();",
+                  "pm.test('mecanismo de sesión', () => pm.expect(cuerpo.mecanismo).to.eql('SESSION'));",
+                  "pm.test('email del registro', () => pm.expect(cuerpo.usuario.email).to.eql(pm.collectionVariables.get('registroEmail')));",
+                  "pm.test('no devuelve contraseña ni hash', () => {",
+                  "  pm.expect(JSON.stringify(cuerpo)).to.not.include('passwordHash');",
+                  "  pm.expect(JSON.stringify(cuerpo)).to.not.include('$2a$');",
+                  "});",
+                  "pm.test('devuelve expiración', () => {",
+                  "  pm.expect(cuerpo.expiraEnSegundos).to.be.above(0);",
+                  "  pm.expect(cuerpo.duracionMaximaSegundos).to.be.above(0);",
+                  "});",
+                  "pm.collectionVariables.set('csrfToken', cuerpo.csrfToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/auth/me del usuario registrado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Requiere la sesión creada por el login anterior. Esperado: 200 con el email de {{registroEmail}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('identidad del usuario registrado', () => pm.expect(pm.response.json().email).to.eql(pm.collectionVariables.get('registroEmail')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/logout tras registro",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Cierra la sesión del usuario registrado con el token CSRF rotado por el login. Esperado: 204 sin contenido."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 sin contenido', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('csrfToken', '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/auth/me tras logout del registro → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Comprueba que el logout anterior invalidó la sesión. Esperado: 401 NO_AUTENTICADO."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 sin sesión', () => pm.response.to.have.status(401));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));"
                 ]
               }
             }
@@ -1437,6 +1642,27 @@
           ]
         }
       ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// La colección es la fuente de verdad de estas variables.",
+          "// Si hay un environment activo, se sincroniza para que no las sombree con valores viejos.",
+          "const gestionadas = ['csrfToken', 'portafolioId', 'registroEmail', 'registroEmailInvalido', 'registroEmailSinCsrf'];",
+          "if (pm.environment.name) {",
+          "  gestionadas.forEach((clave) => {",
+          "    const valor = pm.collectionVariables.get(clave);",
+          "    if (valor !== undefined && valor !== null && valor !== '') {",
+          "      pm.environment.set(clave, valor);",
+          "    }",
+          "  });",
+          "}"
+        ]
+      }
     }
   ]
 }

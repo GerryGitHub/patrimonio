@@ -103,6 +103,9 @@ chocarían con los del script de demostración. Crea primero los catálogos
 mínimos y después tu usuario. El hash de ejemplo corresponde a la contraseña
 `Demo1234!`; no guardes contraseñas en claro.
 
+También puedes crear el usuario con `POST /api/auth/registro` (requiere CSRF y
+no inicia sesión) y después insertar el portafolio y la membresía con SQL.
+
 ```sql
 -- Catálogos mínimos
 INSERT INTO moneda (id, codigo, nombre, simbolo, decimales, activo)
@@ -188,10 +191,13 @@ Testcontainers y no define `spring.datasource.url`.
 3. Ejecuta las carpetas en este orden:
 
    ```text
-   00 → 01 → 02 → 03 → 04 → 99
+   00 → 00b → 01 → 02 → 03 → 04 → 99
    ```
 
-4. En `01 · Autenticación`, el login usa:
+4. `00b · Registro de usuarios` crea un usuario nuevo con un correo único y
+   comprueba que el registro no inicia sesión. Es opcional si solo quieres usar
+   los usuarios de demostración.
+5. En `01 · Autenticación`, el login usa:
    - usuario: `titular@example.com`
    - contraseña: `Demo1234!`
 
@@ -320,12 +326,14 @@ El contenedor `patrimonio-postgres` no se toca en ningún paso.
 3. Aplicar docs/testing/datos-prueba-auth.sql
 4. Arrancar el backend con perfil local y datasource al contenedor
 5. GET /api/auth/csrf
-6. POST /api/auth/login
-7. GET /api/auth/me
-8. GET /api/v1/portafolios
-9. GET /api/v1/portafolios/{id}/cuentas
-10. POST /api/auth/logout
+6. POST /api/auth/registro (opcional; no crea sesión)
+7. POST /api/auth/login
+8. GET /api/auth/me
+9. GET /api/v1/portafolios
+10. GET /api/v1/portafolios/{id}/cuentas
+11. POST /api/auth/logout
 ```
 
-No hay paso de “registro” ni de “crear producto” por HTTP: esos datos se crean
-con SQL en esta fase.
+El registro de usuarios ya está disponible por HTTP, pero no crea sesión:
+después hay que hacer login. Los portafolios, las cuentas y los productos no
+tienen CRUD por HTTP en esta fase; se crean con SQL.

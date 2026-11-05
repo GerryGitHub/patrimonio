@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Patrimonio · API MVP (auth, portafolios y cuentas)",
-    "description": "Colección para probar el MVP de autenticación y autorización de Patrimonio.\n\nQUÉ FUNCIONA\n- Sesión de servidor con cookie HttpOnly PATRIMONIO_SESSION.\n- CSRF con cookie XSRF-TOKEN y cabecera X-XSRF-TOKEN.\n- Login, logout, /me y listado de portafolios autorizados.\n- Consulta de cuentas con autorización por membresía y número enmascarado.\n- Casos negativos 400, 401, 403 y 404.\n\nQUÉ NO EXISTE\n- POST /api/auth/refresh: la estrategia de sesión no usa refresh tokens.\n- Registro, recuperación de contraseña, MFA ni usuario administrador.\n\nREQUISITOS\n- API en {{baseUrl}}.\n- Perfil local o test y patrimonio.api.cuentas.expuesta=true para el endpoint de cuentas.\n- Datos de docs/testing/datos-prueba-auth.sql cargados en una base DESECHABLE, nunca en la local.\n- Postman conserva las cookies. Si repites la colección, borra las cookies de {{baseUrl}} o ejecuta primero 99 · Cierre de sesión.\n\nORDEN RECOMENDADO\n00 → 01 → 02 → 03 → 04 → 99.\nCada carpeta indica sus dependencias. La carpeta 00 debe ejecutarse sin sesión; 01 crea la sesión del titular; 02 usa esa sesión; 03 prueba fallos de login; 04 cambia a un usuario sin membresías; 99 cierra la sesión.\n\nGUÍA\ndocs/testing/postman-guia.md contiene el paso a paso, la tabla de variables y la solución de problemas.\n\nVARIABLES\nLos scripts guardan automáticamente csrfToken y portafolioId. Las credenciales y los UUID corresponden a docs/testing/datos-prueba-auth.sql.",
+    "description": "Colección para probar el MVP de autenticación y autorización de Patrimonio.\n\nQUÉ FUNCIONA\n- Sesión de servidor con cookie HttpOnly PATRIMONIO_SESSION.\n- CSRF con cookie XSRF-TOKEN y cabecera X-XSRF-TOKEN.\n- Registro público de usuarios con correo único; no crea sesión.\n- Login, logout, /me y listado de portafolios autorizados.\n- Consulta de cuentas con autorización por membresía y número enmascarado.\n- Casos negativos 400, 401, 403, 404 y 409.\n\nQUÉ NO EXISTE\n- POST /api/auth/refresh: la estrategia de sesión no usa refresh tokens.\n- Recuperación o cambio de contraseña, MFA ni usuario administrador.\n\nREQUISITOS\n- API en {{baseUrl}}.\n- Perfil local o test y patrimonio.api.cuentas.expuesta=true para el endpoint de cuentas.\n- Datos de docs/testing/datos-prueba-auth.sql cargados en una base DESECHABLE, nunca en la local.\n- Postman conserva las cookies. Si repites la colección, borra las cookies de {{baseUrl}} o ejecuta primero 99 · Cierre de sesión.\n\nORDEN RECOMENDADO\n00 → 00b → 01 → 02 → 03 → 04 → 99.\nCada carpeta indica sus dependencias. La carpeta 00 debe ejecutarse sin sesión; 00b registra un usuario con un correo único y comprueba que no hay sesión; 01 crea la sesión del titular; 02 usa esa sesión; 03 prueba fallos de login; 04 cambia a un usuario sin membresías; 99 cierra la sesión.\n\nGUÍA\ndocs/testing/postman-guia.md contiene el paso a paso, la tabla de variables y la solución de problemas.\n\nVARIABLES\nLos scripts guardan automáticamente csrfToken, portafolioId y los correos únicos de registro. Las credenciales y los UUID corresponden a docs/testing/datos-prueba-auth.sql.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -39,6 +39,31 @@
       "key": "usuarioInexistente",
       "value": "nadie@example.com",
       "description": "Correo que no existe en la base de prueba."
+    },
+    {
+      "key": "registroNombre",
+      "value": "Usuario Postman",
+      "description": "Nombre ficticio usado en el registro de prueba."
+    },
+    {
+      "key": "registroEmail",
+      "value": "",
+      "description": "Correo único del registro. Lo genera el script de 00b en cada ejecución."
+    },
+    {
+      "key": "registroPassword",
+      "value": "Registro123!",
+      "description": "Contraseña ficticia del usuario registrado (8-72 caracteres)."
+    },
+    {
+      "key": "registroEmailInvalido",
+      "value": "",
+      "description": "Correo único para el caso de contraseña corta. Lo genera el script de 00b."
+    },
+    {
+      "key": "registroEmailSinCsrf",
+      "value": "",
+      "description": "Correo único para el caso de registro sin CSRF. Lo genera el script de 00b."
     },
     {
       "key": "csrfToken",
@@ -166,6 +191,297 @@
                 "exec": [
                   "pm.test('401 No autenticado', () => pm.response.to.have.status(401));",
                   "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "00b · Registro de usuarios",
+      "description": "Registra un usuario nuevo con un correo único generado en cada ejecución y comprueba que el registro no crea sesión. Ejecuta esta carpeta sin sesión y antes de 01 · Autenticación. El usuario creado queda en la base de prueba; el correo cambia en cada ejecución para no chocar con intentos anteriores.",
+      "item": [
+        {
+          "name": "GET /api/auth/csrf (para registro)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/csrf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "csrf"
+              ]
+            },
+            "description": "Endpoint público. Obtiene el token CSRF y genera correos únicos para esta ejecución. El registro exige X-XSRF-TOKEN aunque no haya sesión."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const sello = Date.now() + '.' + Math.floor(Math.random() * 100000);",
+                  "pm.collectionVariables.set('registroEmail', 'postman.' + sello + '@example.com');",
+                  "pm.collectionVariables.set('registroEmailInvalido', 'postman.invalido.' + sello + '@example.com');",
+                  "pm.collectionVariables.set('registroEmailSinCsrf', 'postman.sin-csrf.' + sello + '@example.com');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('cabecera esperada', () => pm.expect(pm.response.json().headerName).to.eql('X-XSRF-TOKEN'));",
+                  "pm.test('token no vacío', () => {",
+                  "  const token = pm.response.json().token;",
+                  "  pm.expect(token).to.be.a('string');",
+                  "  pm.expect(token.length).to.be.above(0);",
+                  "});",
+                  "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/registro → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro"
+              ]
+            },
+            "description": "Crea un usuario con {{registroEmail}} y {{registroPassword}}. Esperado: 201 con id, email y nombre; sin contraseña, hash ni token de sesión. No crea sesión ni cookie de autenticación.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{registroNombre}}\",\n  \"email\": \"{{registroEmail}}\",\n  \"password\": \"{{registroPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const cuerpo = pm.response.json();",
+                  "pm.test('devuelve id', () => {",
+                  "  pm.expect(cuerpo.id).to.be.a('string');",
+                  "  pm.expect(cuerpo.id.length).to.be.above(0);",
+                  "});",
+                  "pm.test('correo registrado', () => pm.expect(cuerpo.email).to.eql(pm.collectionVariables.get('registroEmail')));",
+                  "pm.test('nombre registrado', () => pm.expect(cuerpo.nombre).to.eql(pm.collectionVariables.get('registroNombre')));",
+                  "pm.test('sin datos sensibles ni sesión', () => {",
+                  "  pm.expect(cuerpo).to.not.have.property('password');",
+                  "  pm.expect(cuerpo).to.not.have.property('passwordHash');",
+                  "  pm.expect(cuerpo).to.not.have.property('csrfToken');",
+                  "  pm.expect(cuerpo).to.not.have.property('mecanismo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/auth/me tras registro → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Comprueba que el registro no inicia sesión. Esperado: 401 NO_AUTENTICADO. Si ejecutas esta carpeta después de 01, la sesión existente hará que devuelva 200: ejecútala antes de autenticarte."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 sin sesión', () => pm.response.to.have.status(401));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/registro con el mismo correo → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro"
+              ]
+            },
+            "description": "Repite el registro con el mismo correo. Esperado: 409 EMAIL_DUPLICADO, sin repetir el correo en la respuesta.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Otra persona\",\n  \"email\": \"{{registroEmail}}\",\n  \"password\": \"OtraClave123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('EMAIL_DUPLICADO'));",
+                  "pm.test('no repite el correo', () => pm.expect(pm.response.text()).to.not.include(pm.collectionVariables.get('registroEmail')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/registro con contraseña corta → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro"
+              ]
+            },
+            "description": "Contraseña de 5 caracteres. Esperado: 400 VALIDACION_ENTRADA; no se crea el usuario {{registroEmailInvalido}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{registroNombre}}\",\n  \"email\": \"{{registroEmailInvalido}}\",\n  \"password\": \"corta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 validación', () => pm.response.to.have.status(400));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('VALIDACION_ENTRADA'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/registro sin CSRF → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro"
+              ]
+            },
+            "description": "No envía la cabecera X-XSRF-TOKEN. Esperado: 403 ACCESO_DENEGADO; la operación no se ejecuta y no se crea el usuario {{registroEmailSinCsrf}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{registroNombre}}\",\n  \"email\": \"{{registroEmailSinCsrf}}\",\n  \"password\": \"{{registroPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 sin token CSRF', () => pm.response.to.have.status(403));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('ACCESO_DENEGADO'));"
                 ]
               }
             }

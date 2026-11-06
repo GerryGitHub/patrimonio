@@ -5,17 +5,27 @@ import java.util.UUID;
 
 /**
  * Portafolio autorizado que se devuelve por HTTP.
+ *
+ * <p>Incluye la moneda base anidada para que el cliente no tenga que resolver
+ * el catálogo por su cuenta. Se conserva {@code monedaBaseId} por
+ * compatibilidad con los consumidores existentes.</p>
  */
 public record PortafolioResponse(
     UUID id,
     String nombre,
-    UUID monedaBaseId
+    String descripcion,
+    UUID monedaBaseId,
+    MonedaResponse monedaBase,
+    boolean activo
 ) {
 
     static PortafolioResponse from(PortafolioResumen portafolio) {
         return new PortafolioResponse(
             portafolio.id(),
             portafolio.nombre(),
-            portafolio.monedaBaseId());
+            portafolio.descripcion(),
+            portafolio.monedaBaseId(),
+            MonedaResponse.from(portafolio.monedaBase()),
+            portafolio.activo());
     }
 }

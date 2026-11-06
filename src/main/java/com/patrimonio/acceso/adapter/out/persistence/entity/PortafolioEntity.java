@@ -10,9 +10,9 @@ import java.util.UUID;
 /**
  * Mapeo JPA de la tabla {@code portafolio}.
  *
- * <p>Esta entidad pertenece al módulo {@code acceso}. En esta fase solo se usa
- * para la consulta de existencia que necesita {@code cuentas}; no se implementan
- * casos de uso de escritura de portafolios.</p>
+ * <p>Esta entidad pertenece al módulo {@code acceso}. Se usa para la consulta
+ * de existencia que necesita {@code cuentas} y para persistir el alta de
+ * portafolios junto con la membresía inicial de su creador.</p>
  */
 @Entity
 @Table(name = "portafolio", schema = "public")
@@ -44,6 +44,24 @@ public class PortafolioEntity {
         // Constructor requerido por JPA.
     }
 
+    public PortafolioEntity(
+        UUID id,
+        String nombre,
+        UUID monedaBaseId,
+        String descripcion,
+        boolean activo,
+        Instant fechaCreacion,
+        Instant fechaActualizacion
+    ) {
+        this.id = id;
+        this.nombre = nombre;
+        this.monedaBaseId = monedaBaseId;
+        this.descripcion = descripcion;
+        this.activo = activo;
+        this.fechaCreacion = fechaCreacion;
+        this.fechaActualizacion = fechaActualizacion;
+    }
+
     public UUID getId() {
         return id;
     }
@@ -54,6 +72,10 @@ public class PortafolioEntity {
 
     public UUID getMonedaBaseId() {
         return monedaBaseId;
+    }
+
+    public String getDescripcion() {
+        return descripcion;
     }
 
     public boolean isActivo() {

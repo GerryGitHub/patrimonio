@@ -18,10 +18,13 @@ public interface PortafolioJpaRepository extends JpaRepository<PortafolioEntity,
 
     @Query("""
         select new com.patrimonio.acceso.api.dto.PortafolioResumen(
-            p.id, p.nombre, p.monedaBaseId, p.activo
+            p.id, p.nombre, p.descripcion,
+            m.id, m.codigo, m.nombre, m.simbolo, m.decimales,
+            p.activo
         )
-        from PortafolioEntity p
+        from PortafolioEntity p, MonedaEntity m
         where p.id = :portafolioId
+          and m.id = p.monedaBaseId
         """)
     Optional<PortafolioResumen> buscarResumenPorId(@Param("portafolioId") UUID portafolioId);
 }

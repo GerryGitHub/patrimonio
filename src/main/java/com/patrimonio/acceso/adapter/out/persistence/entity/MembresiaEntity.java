@@ -10,9 +10,10 @@ import java.util.UUID;
 /**
  * Mapeo JPA de la tabla {@code membresia}.
  *
- * <p>El rol se conserva como texto porque en esta fase solo se necesita saber
- * que existe una membresía; la capacidad de lectura la conceden todos los
- * roles admitidos por el esquema.</p>
+ * <p>El rol se conserva como texto porque el esquema lo define así. El alta de
+ * portafolios crea la membresía {@code PROPIETARIO} del usuario que los crea;
+ * la capacidad de lectura la conceden todos los roles admitidos por el
+ * esquema.</p>
  */
 @Entity
 @Table(name = "membresia", schema = "public")
@@ -36,6 +37,20 @@ public class MembresiaEntity {
 
     protected MembresiaEntity() {
         // Constructor requerido por JPA.
+    }
+
+    public MembresiaEntity(
+        UUID id,
+        UUID usuarioId,
+        UUID portafolioId,
+        String rol,
+        Instant fechaCreacion
+    ) {
+        this.id = id;
+        this.usuarioId = usuarioId;
+        this.portafolioId = portafolioId;
+        this.rol = rol;
+        this.fechaCreacion = fechaCreacion;
     }
 
     public UUID getUsuarioId() {

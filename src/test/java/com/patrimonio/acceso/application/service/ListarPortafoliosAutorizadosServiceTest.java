@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.patrimonio.acceso.api.dto.MonedaResumen;
 import com.patrimonio.acceso.api.dto.PortafolioResumen;
 import com.patrimonio.acceso.api.port.AccesoQueryPort;
 import com.patrimonio.acceso.application.query.ListarPortafoliosAutorizadosQuery;
@@ -40,7 +41,16 @@ class ListarPortafoliosAutorizadosServiceTest {
     @Test
     void execute_devuelveSoloLoQueAutorizaElPuerto() {
         PortafolioResumen portafolio = new PortafolioResumen(
-            PORTAFOLIO_ID, "Portafolio principal", UUID.randomUUID(), true);
+            PORTAFOLIO_ID,
+            "Portafolio principal",
+            "Descripción principal",
+            new MonedaResumen(
+                UUID.randomUUID(),
+                "USD",
+                "Dólar estadounidense",
+                "$",
+                2),
+            true);
         when(accesoQueryPort.listarAutorizados(USUARIO_ID))
             .thenReturn(List.of(portafolio));
 

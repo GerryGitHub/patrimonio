@@ -35,14 +35,18 @@ public interface MembresiaJpaRepository
 
     @Query("""
         select new com.patrimonio.acceso.api.dto.PortafolioResumen(
-            p.id, p.nombre, p.monedaBaseId, p.activo
+            p.id, p.nombre, p.descripcion,
+            m.id, m.codigo, m.nombre, m.simbolo, m.decimales,
+            p.activo
         )
-        from MembresiaEntity m, PortafolioEntity p, UsuarioEntity u
-        where m.usuarioId = :usuarioId
-          and p.id = m.portafolioId
+        from MembresiaEntity mbr, PortafolioEntity p, UsuarioEntity u,
+             MonedaEntity m
+        where mbr.usuarioId = :usuarioId
+          and p.id = mbr.portafolioId
           and p.activo = true
-          and u.id = m.usuarioId
+          and u.id = mbr.usuarioId
           and u.activo = true
+          and m.id = p.monedaBaseId
         order by p.nombre, p.id
         """)
     List<PortafolioResumen> listarPortafoliosAutorizados(

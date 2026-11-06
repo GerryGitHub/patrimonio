@@ -7,6 +7,7 @@
 *.sql
 # ...excepto el DDL documentado del esquema y la revisión
 !db/esquema.sql
+!db/datos-iniciales.sql
 !docs/schema-review.sql
 !docs/schema-change-proposal.sql
 !docs/schema-change-proposal-v2.sql

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Patrimonio · API MVP (auth, portafolios y cuentas)",
-    "description": "Colección para probar el MVP de autenticación y autorización de Patrimonio.\n\nQUÉ FUNCIONA\n- Sesión de servidor con cookie HttpOnly PATRIMONIO_SESSION.\n- CSRF con cookie XSRF-TOKEN y cabecera X-XSRF-TOKEN.\n- Registro público de usuarios con correo único; no crea sesión.\n- Login con las mismas credenciales del registro y cierre de sesión.\n- Login, logout, /me y listado de portafolios autorizados.\n- Consulta de cuentas con autorización por membresía y número enmascarado.\n- Casos negativos 400, 401, 403, 404 y 409.\n\nQUÉ NO EXISTE\n- POST /api/auth/refresh: la estrategia de sesión no usa refresh tokens.\n- Recuperación o cambio de contraseña, MFA ni usuario administrador.\n\nREQUISITOS\n- API en {{baseUrl}}.\n- Perfil local o test y patrimonio.api.cuentas.expuesta=true para el endpoint de cuentas.\n- Datos de docs/testing/datos-prueba-auth.sql cargados en una base DESECHABLE, nunca en la local.\n- Postman conserva las cookies. Si repites la colección, borra las cookies de {{baseUrl}} o ejecuta primero 99 · Cierre de sesión.\n\nORDEN RECOMENDADO\n00 → 00b → 00c → 01 → 02 → 03 → 04 → 99.\nLa carpeta 00 debe ejecutarse sin sesión; 00b registra un usuario con un correo único y comprueba que no hay sesión; 00c inicia sesión con esas mismas credenciales y cierra la sesión; 01 crea la sesión del titular; 02 usa esa sesión; 03 prueba fallos de login; 04 cambia a un usuario sin membresías; 99 cierra la sesión.\n\nENVIRONMENT\nLa colección funciona sola con sus variables. Si activas un environment, no dupliques csrfToken, portafolioId ni los correos de registro: los scripts los sincronizan con el environment para que no queden valores viejos. Las credenciales y los UUID de demostración son los de docs/testing/datos-prueba-auth.sql.\n\nGUÍA\ndocs/testing/postman-guia.md contiene el paso a paso, la tabla de variables y la solución de problemas.",
+    "description": "Colección para probar el MVP de autenticación y autorización de Patrimonio.\n\nQUÉ FUNCIONA\n- Sesión de servidor con cookie HttpOnly PATRIMONIO_SESSION.\n- CSRF con cookie XSRF-TOKEN y cabecera X-XSRF-TOKEN.\n- Registro público de usuarios con correo único; no crea sesión.\n- Login con las mismas credenciales del registro y cierre de sesión.\n- Login, logout, /me, listado y alta de portafolios, y catálogo de monedas.\n- Consulta de cuentas con autorización por membresía y número enmascarado.\n- Casos negativos 400, 401, 403, 404, 409 y 422.\n\nQUÉ NO EXISTE\n- POST /api/auth/refresh: la estrategia de sesión no usa refresh tokens.\n- Recuperación o cambio de contraseña, MFA ni usuario administrador.\n\nREQUISITOS\n- API en {{baseUrl}}.\n- Perfil local o test y patrimonio.api.cuentas.expuesta=true para el endpoint de cuentas.\n- Datos de docs/testing/datos-prueba-auth.sql cargados en una base DESECHABLE, nunca en la local.\n- Postman conserva las cookies. Si repites la colección, borra las cookies de {{baseUrl}} o ejecuta primero 99 · Cierre de sesión.\n\nORDEN RECOMENDADO\n00 → 00b → 00c → 01 → 02 → 03 → 04 → 05 → 99.\nLa carpeta 00 debe ejecutarse sin sesión; 00b registra un usuario con un correo único y comprueba que no hay sesión; 00c inicia sesión con esas mismas credenciales y cierra la sesión; 01 crea la sesión del titular; 02 usa esa sesión; 03 prueba fallos de login; 04 cambia a un usuario sin membresías; 05 consulta el catálogo y crea un portafolio real; 99 cierra la sesión.\n\nENVIRONMENT\nLa colección funciona sola con sus variables. Si activas un environment, no dupliques csrfToken, portafolioId ni los correos de registro: los scripts los sincronizan con el environment para que no queden valores viejos. Las credenciales y los UUID de demostración son los de docs/testing/datos-prueba-auth.sql.\n\nGUÍA\ndocs/testing/postman-guia.md contiene el paso a paso, la tabla de variables y la solución de problemas.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -94,12 +94,22 @@
       "key": "uuidInvalido",
       "value": "no-es-un-uuid",
       "description": "Valor que no cumple el formato UUID."
+    },
+    {
+      "key": "monedaBaseId",
+      "value": "",
+      "description": "Moneda activa elegida por el script de GET /api/v1/monedas."
+    },
+    {
+      "key": "portafolioCreadoId",
+      "value": "",
+      "description": "Portafolio creado por la carpeta 05; lo usa la comprobación del listado."
     }
   ],
   "item": [
     {
       "name": "00 · Sin sesión",
-      "description": "Comprueba que los endpoints protegidos rechazan peticiones sin sesión. Ejecuta esta carpeta antes de iniciar sesión y con las cookies de {{baseUrl}} limpias. Resultado esperado: 401 NO_AUTENTICADO en los tres requests.",
+      "description": "Comprueba que los endpoints protegidos rechazan peticiones sin sesión. Ejecuta esta carpeta antes de iniciar sesión y con las cookies de {{baseUrl}} limpias. Resultado esperado: 401 NO_AUTENTICADO en los cuatro requests.",
       "item": [
         {
           "name": "GET /api/auth/me sin sesión → 401",
@@ -182,6 +192,37 @@
               ]
             },
             "description": "Petición sin cookie de sesión. Esperado: 401 con code NO_AUTENTICADO. No debe devolver cuentas ni números enmascarados."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 No autenticado', () => pm.response.to.have.status(401));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_AUTENTICADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/v1/monedas sin sesión → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/monedas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "monedas"
+              ]
+            },
+            "description": "El catálogo de monedas también exige sesión. Esperado: 401 con code NO_AUTENTICADO."
           },
           "event": [
             {
@@ -1532,6 +1573,298 @@
                   "pm.test('404 sin revelar existencia', () => pm.response.to.have.status(404));",
                   "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('NO_ENCONTRADO'));",
                   "pm.test('no revela el nombre del portafolio', () => pm.expect(pm.response.json().detail).to.not.include('Portafolio A'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 · Alta de portafolios y monedas",
+      "description": "Consulta el catálogo real de monedas y crea un portafolio con la sesión abierta en 01 o 04. El backend asigna el usuario desde la sesión y crea la membresía PROPIETARIO. La carpeta comprueba el 201, el listado actualizado, el 403 sin CSRF, el 400 de validación y el 422 de moneda inexistente.",
+      "item": [
+        {
+          "name": "GET /api/v1/monedas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/monedas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "monedas"
+              ]
+            },
+            "description": "Requiere sesión. Devuelve solo monedas activas ordenadas por código. El script guarda la primera en {{monedaBaseId}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const catalogo = pm.response.json();",
+                  "pm.test('array de monedas', () => pm.expect(catalogo).to.be.an('array'));",
+                  "pm.test('catálogo no vacío', () => pm.expect(catalogo.length).to.be.above(0));",
+                  "pm.test('contrato de moneda', () => {",
+                  "  const moneda = catalogo[0];",
+                  "  pm.expect(moneda).to.have.property('id');",
+                  "  pm.expect(moneda).to.have.property('codigo');",
+                  "  pm.expect(moneda).to.have.property('nombre');",
+                  "  pm.expect(moneda).to.have.property('decimales');",
+                  "});",
+                  "if (catalogo.length > 0) {",
+                  "  pm.collectionVariables.set('monedaBaseId', catalogo[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/v1/portafolios → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios"
+              ]
+            },
+            "description": "Crea un portafolio con la moneda obtenida del catálogo. Esperado: 201 con id, nombre, descripción, monedaBaseId, monedaBase anidada y activo. El script guarda el id en {{portafolioCreadoId}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Portafolio Postman\",\n  \"descripcion\": \"Creado por la colección\",\n  \"monedaBaseId\": \"{{monedaBaseId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const creado = pm.response.json();",
+                  "pm.test('cabecera Location', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/v1/portafolios/'));",
+                  "pm.test('nombre y descripción normalizados', () => {",
+                  "  pm.expect(creado.nombre).to.eql('Portafolio Postman');",
+                  "  pm.expect(creado.descripcion).to.eql('Creado por la colección');",
+                  "});",
+                  "pm.test('moneda base coherente', () => {",
+                  "  pm.expect(creado.monedaBaseId).to.eql(pm.collectionVariables.get('monedaBaseId'));",
+                  "  pm.expect(creado.monedaBase.id).to.eql(creado.monedaBaseId);",
+                  "  pm.expect(creado.monedaBase.codigo).to.be.a('string');",
+                  "});",
+                  "pm.test('portafolio activo', () => pm.expect(creado.activo).to.eql(true));",
+                  "pm.collectionVariables.set('portafolioCreadoId', creado.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/v1/portafolios incluye el creado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios"
+              ]
+            },
+            "description": "Comprueba que el portafolio recién creado aparece en el listado autorizado y que cada elemento incluye descripción y moneda base."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "const creadoId = pm.collectionVariables.get('portafolioCreadoId');",
+                  "pm.test('el portafolio creado está en el listado', () => {",
+                  "  pm.expect(lista.map((p) => p.id)).to.include(creadoId);",
+                  "});",
+                  "pm.test('contrato enriquecido', () => {",
+                  "  const creado = lista.find((p) => p.id === creadoId);",
+                  "  pm.expect(creado).to.have.property('descripcion');",
+                  "  pm.expect(creado.monedaBase).to.have.property('codigo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/v1/portafolios sin CSRF → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios"
+              ]
+            },
+            "description": "La sesión existe, pero falta la cabecera X-XSRF-TOKEN. Esperado: 403 sin crear nada.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sin CSRF\",\n  \"monedaBaseId\": \"{{monedaBaseId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 por CSRF', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/v1/portafolios con nombre vacío → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios"
+              ]
+            },
+            "description": "Nombre en blanco. Esperado: 400 VALIDACION_ENTRADA sin crear el portafolio.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"   \",\n  \"monedaBaseId\": \"{{monedaBaseId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 de validación', () => pm.response.to.have.status(400));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('VALIDACION_ENTRADA'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/v1/portafolios con moneda inexistente → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/portafolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "portafolios"
+              ]
+            },
+            "description": "Moneda válida como UUID pero inexistente. Esperado: 422 MONEDA_INVALIDA; no se revela el catálogo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Moneda inexistente\",\n  \"monedaBaseId\": \"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 de regla de negocio', () => pm.response.to.have.status(422));",
+                  "pm.test('código estable', () => pm.expect(pm.response.json().code).to.eql('MONEDA_INVALIDA'));"
                 ]
               }
             }

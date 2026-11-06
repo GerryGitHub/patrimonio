@@ -16,9 +16,10 @@ La colección cubre lo que existe hoy en el backend:
 |------|-----------|--------|
 | Registro | `POST /api/auth/registro` | Público, pero exige CSRF; no crea sesión |
 | Autenticación | `GET /api/auth/csrf`, `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout` | Disponible en todos los perfiles |
-| Portafolios | `GET /api/v1/portafolios` | Disponible con sesión |
+| Portafolios | `GET /api/v1/portafolios`, `POST /api/v1/portafolios` | Disponible con sesión; la creación exige CSRF |
+| Monedas | `GET /api/v1/monedas` | Catálogo real de monedas activas; requiere sesión |
 | Cuentas | `GET /api/v1/portafolios/{id}/cuentas` | Solo con perfil `local` o `test` y `patrimonio.api.cuentas.expuesta=true` |
-| Seguridad | CSRF, cookies, 401, 403, 404, 400, 409 | Cubierto por la colección |
+| Seguridad | CSRF, cookies, 401, 403, 404, 400, 409, 422 | Cubierto por la colección |
 
 No existen todavía:
 
@@ -83,41 +84,45 @@ ejemplo se incluye para que el comando sea explícito.
 | `portafolioInactivoId` | UUID del portafolio C | Inactivo, con membresía |
 | `portafolioInexistenteId` | UUID válido inexistente | Caso 404 |
 | `uuidInvalido` | `no-es-un-uuid` | Caso 400 |
+| `monedaBaseId` | vacío | Lo guarda `GET /api/v1/monedas` con la primera moneda activa |
+| `portafolioCreadoId` | vacío | Lo guarda `POST /api/v1/portafolios` y lo usa el listado |
 
 Los scripts actualizan `csrfToken` después de `GET /api/auth/csrf` y del login,
-`portafolioId` con el primer portafolio autorizado, y los correos de registro
-con valores únicos en cada ejecución de `00b`.
+`portafolioId` con el primer portafolio autorizado, `monedaBaseId` con la
+primera moneda activa, `portafolioCreadoId` con el portafolio recién creado, y
+los correos de registro con valores únicos en cada ejecución de `00b`.
 
-`csrfToken`, `portafolioId`, `registroEmail`, `registroEmailInvalido` y
-`registroEmailSinCsrf` son variables gestionadas por la colección. Si hay un
-environment activo, los scripts las copian allí antes de cada request para que
-no quede un valor viejo. No las definas a mano en el environment; si ya existen,
-la colección las sobrescribe.
+`csrfToken`, `portafolioId`, `monedaBaseId`, `portafolioCreadoId`,
+`registroEmail`, `registroEmailInvalido` y `registroEmailSinCsrf` son variables
+gestionadas por la colección. Si hay un environment activo, los scripts las
+copian allí antes de cada request para que no quede un valor viejo. No las
+definas a mano en el environment; si ya existen, la colección las sobrescribe.
 
 ## 5. Orden de ejecución
 
 Ejecuta las carpetas en este orden:
 
 ```text
-00 → 00b → 00c → 01 → 02 → 03 → 04 → 99
+00 → 00b → 00c → 01 → 02 → 03 → 04 → 05 → 99
 ```
 
 | Orden | Carpeta | Dependencia | Qué comprueba |
 |-------|---------|-------------|---------------|
-| 1 | `00 · Sin sesión` | Cookies limpias | `401 NO_AUTENTICADO` en `/me`, portafolios y cuentas |
+| 1 | `00 · Sin sesión` | Cookies limpias | `401 NO_AUTENTICADO` en `/me`, portafolios, monedas y cuentas |
 | 2 | `00b · Registro de usuarios` | Sin sesión y antes de `01` | `201` sin sesión, `/me` 401, duplicado 409, validación 400 y 403 sin CSRF |
 | 3 | `00c · Login tras registro` | Usuario creado por `00b` | Login con `{{registroEmail}}`/`{{registroPassword}}`, `/me` 200 y logout 204 |
 | 4 | `01 · Autenticación` | Ninguna | CSRF, login del titular y `/me` |
 | 5 | `02 · Portafolios y cuentas` | Sesión de `01` | Portafolios autorizados, cuentas enmascaradas, 404 y 400 |
 | 6 | `03 · Casos negativos de login` | Ninguna (pide su propio CSRF) | 401 genérico, 400 de validación y 403 sin CSRF |
 | 7 | `04 · Usuario sin membresías` | Ninguna (pide su propio CSRF) | Lista vacía y 404 sin revelar el portafolio |
-| 8 | `99 · Cierre de sesión` | Sesión de `01` o `04` | CSRF, `204` en logout y `401` posterior en `/me` |
+| 8 | `05 · Alta de portafolios y monedas` | Sesión de `01` o `04` | Catálogo de monedas, `201` con membresía, listado actualizado, 403, 400 y 422 |
+| 9 | `99 · Cierre de sesión` | Sesión de `01`, `04` o `05` | CSRF, `204` en logout y `401` posterior en `/me` |
 
 ### Paso a paso
 
 1. **`00 · Sin sesión`**
    - Asegúrate de que Postman no tiene cookies de `{{baseUrl}}`.
-   - Ejecuta los tres `GET`.
+   - Ejecuta los cuatro `GET`.
    - Todos deben devolver `401` con `code: "NO_AUTENTICADO"`.
 
 2. **`00b · Registro de usuarios`**
@@ -174,7 +179,20 @@ Ejecuta las carpetas en este orden:
    - `GET /api/v1/portafolios` debe devolver `[]`.
    - Las cuentas del portafolio A deben devolver `404`.
 
-8. **`99 · Cierre de sesión`**
+8. **`05 · Alta de portafolios y monedas`**
+   - Ejecuta `GET /api/v1/monedas`; debe devolver `200` con al menos una moneda
+     activa y guardar su `id` en `{{monedaBaseId}}`.
+   - `POST /api/v1/portafolios` debe devolver `201`, la cabecera `Location` y el
+     portafolio con `monedaBase` anidada; guarda el `id` en
+     `{{portafolioCreadoId}}`.
+   - El listado debe incluir el portafolio creado con `descripcion` y
+     `monedaBase`.
+   - El POST sin `X-XSRF-TOKEN` debe devolver `403`; el nombre en blanco `400
+     VALIDACION_ENTRADA`; la moneda inexistente `422 MONEDA_INVALIDA`.
+   - Esta carpeta necesita la sesión abierta en `01` o `04`. Crea datos reales
+     en la base de prueba; no los borra.
+
+9. **`99 · Cierre de sesión`**
    - `GET /api/auth/csrf` obtiene un token válido para el logout.
    - `POST /api/auth/logout` debe devolver `204`.
    - `GET /api/auth/me` debe devolver `401`.

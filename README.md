@@ -81,9 +81,24 @@ POST /api/auth/logout
 Portafolios y cuentas (requieren sesión):
 
 ```http
-GET /api/v1/portafolios
-GET /api/v1/portafolios/{portafolioId}/cuentas
+GET  /api/v1/monedas
+GET  /api/v1/portafolios
+POST /api/v1/portafolios
+GET  /api/v1/portafolios/{portafolioId}/cuentas
 ```
+
+`GET /api/v1/monedas` devuelve el catálogo real de monedas activas, ordenado por
+código. Es la única fuente del selector de moneda base: el cliente no mantiene
+una lista duplicada.
+
+`POST /api/v1/portafolios` exige sesión y CSRF, recibe `nombre`, `descripcion`
+opcional y `monedaBaseId`, y responde `201` con el portafolio creado y la
+cabecera `Location`. El usuario se toma siempre de la sesión, nunca del cuerpo.
+La operación crea el portafolio y la membresía `PROPIETARIO` del creador en una
+sola transacción. Un nombre o descripción inválidos responden `400
+VALIDACION_ENTRADA`; una moneda inexistente o inactiva responde `422
+MONEDA_INVALIDA`. El listado incluye `descripcion`, `monedaBaseId` y la moneda
+base anidada (`id`, `codigo`, `nombre`, `simbolo`, `decimales`).
 
 El registro (`POST /api/auth/registro`) es público pero exige CSRF, normaliza
 nombre y correo, guarda la contraseña como hash BCrypt y responde `201` con la
@@ -127,7 +142,14 @@ completo desde una base vacía (crear usuario, login y datos con SQL).
 ## Esquema de datos
 
 El esquema se aplicó directamente en la base `patrimonio` (20 tablas, 20 PK,
-28 FK, 12 UNIQUE, 18 CHECK, 62 índices). No se cargaron datos.
+28 FK, 12 UNIQUE, 18 CHECK, 62 índices). El catálogo mínimo de monedas se carga
+con `db/datos-iniciales.sql`, un script idempotente que no crea usuarios,
+portafolios ni cuentas:
+
+```bash
+psql -v ON_ERROR_STOP=1 -f db/esquema.sql
+psql -v ON_ERROR_STOP=1 -f db/datos-iniciales.sql
+```
 
 | Grupo | Tablas |
 | ----- | ------ |

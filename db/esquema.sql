@@ -135,6 +135,7 @@ CREATE TABLE cuenta_financiera (
     institucion_id uuid NOT NULL REFERENCES institucion (id) ON DELETE RESTRICT,
     tipo_cuenta_id uuid NOT NULL REFERENCES tipo_cuenta (id) ON DELETE RESTRICT,
     nombre         varchar(150) NOT NULL,
+    descripcion    varchar(500),
     numero_cuenta  varchar(64),
     moneda_id      uuid NOT NULL REFERENCES moneda (id) ON DELETE RESTRICT,
     activo         boolean NOT NULL DEFAULT true,

@@ -12,16 +12,22 @@ import java.util.UUID;
  * Las referencias a otros agregados ({@code portafolioId}, {@code institucionId},
  * {@code tipoCuentaId}, {@code monedaId}) se mantienen por identificador, sin
  * asociaciones de objetos.</p>
+ *
+ * <p>Una cuenta no se elimina físicamente: se desactiva y conserva su fecha de
+ * cierre. La cuenta puede tener posiciones y contratos en entregables
+ * posteriores; este agregado no los anticipa.</p>
  */
 public final class CuentaFinanciera {
 
     private static final int LONGITUD_MAXIMA_NOMBRE = 150;
+    private static final int LONGITUD_MAXIMA_DESCRIPCION = 500;
 
     private final UUID id;
     private final UUID portafolioId;
     private final UUID institucionId;
     private final UUID tipoCuentaId;
     private final String nombre;
+    private final Optional<String> descripcion;
     private final Optional<NumeroCuenta> numeroCuenta;
     private final UUID monedaId;
     private final boolean activo;
@@ -34,6 +40,7 @@ public final class CuentaFinanciera {
         UUID institucionId,
         UUID tipoCuentaId,
         String nombre,
+        String descripcion,
         NumeroCuenta numeroCuenta,
         UUID monedaId,
         boolean activo,
@@ -45,6 +52,7 @@ public final class CuentaFinanciera {
         this.institucionId = institucionId;
         this.tipoCuentaId = tipoCuentaId;
         this.nombre = nombre;
+        this.descripcion = Optional.ofNullable(descripcion);
         this.numeroCuenta = Optional.ofNullable(numeroCuenta);
         this.monedaId = monedaId;
         this.activo = activo;
@@ -53,11 +61,85 @@ public final class CuentaFinanciera {
     }
 
     /**
+     * Crea una cuenta nueva y activa.
+     */
+    public static CuentaFinanciera crear(
+        UUID id,
+        UUID portafolioId,
+        UUID institucionId,
+        UUID tipoCuentaId,
+        String nombre,
+        String descripcion,
+        NumeroCuenta numeroCuenta,
+        UUID monedaId,
+        LocalDate fechaApertura
+    ) {
+        requerir(id, "id");
+        requerir(portafolioId, "portafolioId");
+        requerir(institucionId, "institucionId");
+        requerir(tipoCuentaId, "tipoCuentaId");
+        requerir(monedaId, "monedaId");
+        validarNombre(nombre);
+        validarDescripcion(descripcion);
+        validarFechas(fechaApertura, null);
+
+        return new CuentaFinanciera(
+            id,
+            portafolioId,
+            institucionId,
+            tipoCuentaId,
+            nombre,
+            descripcion,
+            numeroCuenta,
+            monedaId,
+            true,
+            fechaApertura,
+            null
+        );
+    }
+
+    /**
      * Reconstruye una cuenta desde persistencia validando sus invariantes.
-     *
-     * <p>Se usa tanto al leer de la base como en pruebas. Si los datos
-     * almacenados son incoherentes, falla de forma explícita en lugar de
-     * devolver un agregado inválido.</p>
+     */
+    public static CuentaFinanciera reconstruir(
+        UUID id,
+        UUID portafolioId,
+        UUID institucionId,
+        UUID tipoCuentaId,
+        String nombre,
+        String descripcion,
+        NumeroCuenta numeroCuenta,
+        UUID monedaId,
+        boolean activo,
+        LocalDate fechaApertura,
+        LocalDate fechaCierre
+    ) {
+        requerir(id, "id");
+        requerir(portafolioId, "portafolioId");
+        requerir(institucionId, "institucionId");
+        requerir(tipoCuentaId, "tipoCuentaId");
+        requerir(monedaId, "monedaId");
+        validarNombre(nombre);
+        validarDescripcion(descripcion);
+        validarFechas(fechaApertura, fechaCierre);
+
+        return new CuentaFinanciera(
+            id,
+            portafolioId,
+            institucionId,
+            tipoCuentaId,
+            nombre,
+            descripcion,
+            numeroCuenta,
+            monedaId,
+            activo,
+            fechaApertura,
+            fechaCierre
+        );
+    }
+
+    /**
+     * Sobrecarga de compatibilidad para datos anteriores a la descripción.
      */
     public static CuentaFinanciera reconstruir(
         UUID id,
@@ -71,13 +153,41 @@ public final class CuentaFinanciera {
         LocalDate fechaApertura,
         LocalDate fechaCierre
     ) {
-        requerir(id, "id");
-        requerir(portafolioId, "portafolioId");
+        return reconstruir(
+            id,
+            portafolioId,
+            institucionId,
+            tipoCuentaId,
+            nombre,
+            null,
+            numeroCuenta,
+            monedaId,
+            activo,
+            fechaApertura,
+            fechaCierre);
+    }
+
+    /**
+     * Devuelve una copia con los datos editables actualizados.
+     *
+     * <p>El identificador, el portafolio y el estado no cambian por esta vía:
+     * el estado tiene su propia operación explícita.</p>
+     */
+    public CuentaFinanciera actualizarDatos(
+        UUID institucionId,
+        UUID tipoCuentaId,
+        String nombre,
+        String descripcion,
+        NumeroCuenta numeroCuenta,
+        UUID monedaId,
+        LocalDate fechaApertura
+    ) {
         requerir(institucionId, "institucionId");
         requerir(tipoCuentaId, "tipoCuentaId");
         requerir(monedaId, "monedaId");
         validarNombre(nombre);
-        validarFechas(fechaApertura, fechaCierre);
+        validarDescripcion(descripcion);
+        validarFechas(fechaApertura, fechaCierre.orElse(null));
 
         return new CuentaFinanciera(
             id,
@@ -85,11 +195,39 @@ public final class CuentaFinanciera {
             institucionId,
             tipoCuentaId,
             nombre,
+            descripcion,
             numeroCuenta,
             monedaId,
             activo,
             fechaApertura,
-            fechaCierre
+            fechaCierre.orElse(null)
+        );
+    }
+
+    /**
+     * Cambia el estado de la cuenta.
+     *
+     * <p>Al desactivar se conserva la fecha de cierre existente o se usa la
+     * fecha indicada. Al reactivar se limpia la fecha de cierre.</p>
+     */
+    public CuentaFinanciera cambiarEstado(boolean nuevoActivo, LocalDate fechaCierre) {
+        LocalDate cierre = nuevoActivo
+            ? null
+            : (fechaCierre != null ? fechaCierre : this.fechaCierre.orElse(null));
+        validarFechas(fechaApertura.orElse(null), cierre);
+
+        return new CuentaFinanciera(
+            id,
+            portafolioId,
+            institucionId,
+            tipoCuentaId,
+            nombre,
+            descripcion.orElse(null),
+            numeroCuenta.orElse(null),
+            monedaId,
+            nuevoActivo,
+            fechaApertura.orElse(null),
+            cierre
         );
     }
 
@@ -107,6 +245,14 @@ public final class CuentaFinanciera {
             throw new CuentaInvalidaException(
                 "El nombre de la cuenta no puede superar "
                     + LONGITUD_MAXIMA_NOMBRE + " caracteres.");
+        }
+    }
+
+    private static void validarDescripcion(String descripcion) {
+        if (descripcion != null && descripcion.length() > LONGITUD_MAXIMA_DESCRIPCION) {
+            throw new CuentaInvalidaException(
+                "La descripción de la cuenta no puede superar "
+                    + LONGITUD_MAXIMA_DESCRIPCION + " caracteres.");
         }
     }
 
@@ -136,6 +282,10 @@ public final class CuentaFinanciera {
 
     public String nombre() {
         return nombre;
+    }
+
+    public Optional<String> descripcion() {
+        return descripcion;
     }
 
     public Optional<NumeroCuenta> numeroCuenta() {

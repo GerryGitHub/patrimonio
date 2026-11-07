@@ -9,7 +9,9 @@ import static org.mockito.Mockito.when;
 import com.patrimonio.acceso.api.dto.PermisoPortafolio;
 import com.patrimonio.acceso.api.port.AccesoQueryPort;
 import com.patrimonio.cuentas.application.port.out.CuentaFinancieraRepository;
+import com.patrimonio.cuentas.application.query.FiltroCuentas;
 import com.patrimonio.cuentas.application.query.ListarCuentasPorPortafolioQuery;
+import com.patrimonio.cuentas.application.support.AccesoPortafolio;
 import com.patrimonio.cuentas.application.view.CuentaFinancieraView;
 import com.patrimonio.cuentas.domain.model.CuentaFinanciera;
 import com.patrimonio.cuentas.domain.model.NumeroCuenta;
@@ -42,6 +44,8 @@ class ListarCuentasPorPortafolioServiceTest {
         UUID.fromString("44444444-4444-4444-4444-444444444444");
     private static final UUID MONEDA_ID =
         UUID.fromString("55555555-5555-5555-5555-555555555555");
+    private static final FiltroCuentas SIN_FILTROS =
+        new FiltroCuentas(null, null, null);
 
     @Mock
     private AccesoQueryPort accesoQueryPort;
@@ -54,7 +58,7 @@ class ListarCuentasPorPortafolioServiceTest {
     @BeforeEach
     void setUp() {
         service = new ListarCuentasPorPortafolioService(
-            accesoQueryPort, cuentaFinancieraRepository);
+            new AccesoPortafolio(accesoQueryPort), cuentaFinancieraRepository);
     }
 
     @Test
@@ -76,7 +80,7 @@ class ListarCuentasPorPortafolioServiceTest {
 
         when(accesoQueryPort.buscarPermiso(USUARIO_ID, PORTAFOLIO_ID))
             .thenReturn(Optional.of(new PermisoPortafolio(PORTAFOLIO_ID, true)));
-        when(cuentaFinancieraRepository.listarPorPortafolio(PORTAFOLIO_ID))
+        when(cuentaFinancieraRepository.listarPorPortafolio(PORTAFOLIO_ID, SIN_FILTROS))
             .thenReturn(List.of(cuentaCorriente, cuentaAhorro));
 
         List<CuentaFinancieraView> resultado = service.execute(consulta());
@@ -90,14 +94,14 @@ class ListarCuentasPorPortafolioServiceTest {
         assertThat(resultado.get(1).fechaApertura()).isNull();
         assertThat(resultado.get(1).fechaCierre()).isNull();
 
-        verify(cuentaFinancieraRepository).listarPorPortafolio(PORTAFOLIO_ID);
+        verify(cuentaFinancieraRepository).listarPorPortafolio(PORTAFOLIO_ID, SIN_FILTROS);
     }
 
     @Test
     void execute_cuandoNoHayCuentas_devuelveListaVacia() {
         when(accesoQueryPort.buscarPermiso(USUARIO_ID, PORTAFOLIO_ID))
             .thenReturn(Optional.of(new PermisoPortafolio(PORTAFOLIO_ID, true)));
-        when(cuentaFinancieraRepository.listarPorPortafolio(PORTAFOLIO_ID))
+        when(cuentaFinancieraRepository.listarPorPortafolio(PORTAFOLIO_ID, SIN_FILTROS))
             .thenReturn(List.of());
 
         List<CuentaFinancieraView> resultado = service.execute(consulta());
@@ -136,7 +140,7 @@ class ListarCuentasPorPortafolioServiceTest {
 
         when(accesoQueryPort.buscarPermiso(USUARIO_ID, PORTAFOLIO_ID))
             .thenReturn(Optional.of(new PermisoPortafolio(PORTAFOLIO_ID, true)));
-        when(cuentaFinancieraRepository.listarPorPortafolio(PORTAFOLIO_ID))
+        when(cuentaFinancieraRepository.listarPorPortafolio(PORTAFOLIO_ID, SIN_FILTROS))
             .thenThrow(fallo);
 
         assertThatThrownBy(() -> service.execute(consulta()))

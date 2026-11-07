@@ -17,7 +17,7 @@ public class CuentaFinancieraResponseAssembler {
         return cuentas.stream().map(this::toResponse).toList();
     }
 
-    private CuentaFinancieraResponse toResponse(CuentaFinancieraView cuenta) {
+    public CuentaFinancieraResponse toResponse(CuentaFinancieraView cuenta) {
         return new CuentaFinancieraResponse(
             cuenta.id(),
             cuenta.nombre(),
@@ -27,7 +27,8 @@ public class CuentaFinancieraResponseAssembler {
             cuenta.monedaId(),
             cuenta.activo(),
             cuenta.fechaApertura(),
-            cuenta.fechaCierre()
+            cuenta.fechaCierre(),
+            cuenta.descripcion()
         );
     }
 }

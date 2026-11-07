@@ -20,7 +20,7 @@ public interface MembresiaJpaRepository
     extends JpaRepository<MembresiaEntity, UUID> {
 
     @Query("""
-        select p.id
+        select m
         from MembresiaEntity m, PortafolioEntity p, UsuarioEntity u
         where m.usuarioId = :usuarioId
           and m.portafolioId = :portafolioId
@@ -29,7 +29,7 @@ public interface MembresiaJpaRepository
           and u.id = m.usuarioId
           and u.activo = true
         """)
-    Optional<UUID> buscarPortafolioAutorizado(
+    Optional<MembresiaEntity> buscarMembresiaAutorizada(
         @Param("usuarioId") UUID usuarioId,
         @Param("portafolioId") UUID portafolioId);
 

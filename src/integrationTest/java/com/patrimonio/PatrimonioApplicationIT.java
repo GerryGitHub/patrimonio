@@ -71,7 +71,7 @@ class PatrimonioApplicationIT {
             """, Integer.class);
 
         assertThat(columnas)
-            .as("el esquema de prueba debe contener las 10 columnas mapeadas")
-            .isEqualTo(10);
+            .as("el esquema de prueba debe contener las 11 columnas mapeadas")
+            .isEqualTo(11);
     }
 }

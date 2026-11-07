@@ -6,9 +6,9 @@ import java.util.UUID;
 /**
  * Vista de aplicación de una cuenta financiera.
  *
- * <p>Los campos {@code numeroCuenta}, {@code fechaApertura} y {@code fechaCierre}
- * pueden ser {@code null} porque las columnas correspondientes admiten NULL en
- * el esquema.</p>
+ * <p>Los campos opcionales del esquema se representan con {@code null}. El
+ * número de cuenta viaja completo dentro de la aplicación; el adaptador HTTP
+ * lo enmascara antes de serializarlo.</p>
  */
 public record CuentaFinancieraView(
     UUID id,
@@ -19,6 +19,35 @@ public record CuentaFinancieraView(
     UUID monedaId,
     boolean activo,
     LocalDate fechaApertura,
-    LocalDate fechaCierre
+    LocalDate fechaCierre,
+    String descripcion
 ) {
+
+    /**
+     * Constructor de compatibilidad para consumidores anteriores a la
+     * descripción.
+     */
+    public CuentaFinancieraView(
+        UUID id,
+        String nombre,
+        String numeroCuenta,
+        UUID institucionId,
+        UUID tipoCuentaId,
+        UUID monedaId,
+        boolean activo,
+        LocalDate fechaApertura,
+        LocalDate fechaCierre
+    ) {
+        this(
+            id,
+            nombre,
+            numeroCuenta,
+            institucionId,
+            tipoCuentaId,
+            monedaId,
+            activo,
+            fechaApertura,
+            fechaCierre,
+            null);
+    }
 }

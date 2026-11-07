@@ -20,6 +20,7 @@ public record CuentaFinancieraResponse(
     UUID monedaId,
     boolean activo,
     LocalDate fechaApertura,
-    LocalDate fechaCierre
+    LocalDate fechaCierre,
+    String descripcion
 ) {
 }

@@ -7,8 +7,11 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -300,6 +303,320 @@ class CuentaFinancieraApiIT {
             .doesNotContain("ES91 2100");
     }
 
+    @Test
+    void listar_filtraPorInstitucionTipoYEstado() throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio con filtros", true);
+        crearMembresia(usuarioId, portafolio);
+        MockHttpSession sesion = iniciarSesion();
+
+        UUID otraInstitucion = UUID.randomUUID();
+        UUID otroTipo = UUID.randomUUID();
+        jdbcTemplate.update(
+            "insert into institucion (id, nombre, tipo) values (?, ?, ?)",
+            otraInstitucion, "Otra institución", "BANCO");
+        jdbcTemplate.update(
+            "insert into tipo_cuenta (id, nombre) values (?, ?)",
+            otroTipo, "Inversión");
+
+        insertarCuentaEn(
+            portafolio, "Cuenta principal", institucionId, tipoCuentaId,
+            "1111", true);
+        insertarCuentaEn(
+            portafolio, "Cuenta de otra institución", otraInstitucion, tipoCuentaId,
+            "2222", true);
+        insertarCuentaEn(
+            portafolio, "Cuenta de otro tipo", institucionId, otroTipo,
+            "3333", true);
+        insertarCuentaEn(
+            portafolio, "Cuenta inactiva", institucionId, tipoCuentaId,
+            "4444", false);
+
+        mockMvc.perform(get(RUTA, portafolio)
+                .param("institucionId", institucionId.toString())
+                .session(sesion))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(3)));
+
+        mockMvc.perform(get(RUTA, portafolio)
+                .param("tipoCuentaId", otroTipo.toString())
+                .session(sesion))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(1)))
+            .andExpect(jsonPath("$[0].nombre").value("Cuenta de otro tipo"));
+
+        mockMvc.perform(get(RUTA, portafolio)
+                .param("activo", "false")
+                .session(sesion))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(1)))
+            .andExpect(jsonPath("$[0].nombre").value("Cuenta inactiva"));
+    }
+
+    @Test
+    void consultar_devuelveElDetalleEnmascaradoYRechazaCuentasDeOtroPortafolio()
+        throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio propio", true);
+        UUID otroPortafolio = crearPortafolio("Portafolio ajeno", true);
+        crearMembresia(usuarioId, portafolio);
+        MockHttpSession sesion = iniciarSesion();
+        UUID cuenta = insertarCuenta(
+            portafolio, "Cuenta propia", "ES91 2100 0418 4502 0005 1332",
+            true, LocalDate.of(2024, 1, 15), null);
+        UUID ajena = insertarCuenta(
+            otroPortafolio, "Cuenta ajena", null, true, null, null);
+
+        mockMvc.perform(get(RUTA + "/{cuentaId}", portafolio, cuenta)
+                .session(sesion))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(cuenta.toString()))
+            .andExpect(jsonPath("$.nombre").value("Cuenta propia"))
+            .andExpect(jsonPath("$.numeroCuenta").value("****1332"))
+            .andExpect(content().string(not(containsString("ES91 2100"))));
+
+        mockMvc.perform(get(RUTA + "/{cuentaId}", portafolio, ajena)
+                .session(sesion))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("NO_ENCONTRADO"))
+            .andExpect(content().string(not(containsString("Cuenta ajena"))));
+    }
+
+    @Test
+    void crear_conPermisoDeEditor_guardaLaCuentaYEnmascaraLaRespuesta()
+        throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio de alta", true);
+        crearMembresia(usuarioId, portafolio, "EDITOR");
+        MockHttpSession sesion = iniciarSesion();
+
+        mockMvc.perform(post(RUTA, portafolio)
+                .session(sesion)
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "institucionId": "%s",
+                      "tipoCuentaId": "%s",
+                      "monedaId": "%s",
+                      "nombre": "  Cuenta   nueva ",
+                      "descripcion": "Detalle de la cuenta",
+                      "numeroCuenta": "ES91 2100 0418 4502 0005 1332",
+                      "fechaApertura": "2024-01-15"
+                    }
+                    """.formatted(institucionId, tipoCuentaId, monedaId)))
+            .andExpect(status().isCreated())
+            .andExpect(header().string("Location", containsString(
+                "/api/v1/portafolios/" + portafolio + "/cuentas/")))
+            .andExpect(jsonPath("$.nombre").value("Cuenta nueva"))
+            .andExpect(jsonPath("$.numeroCuenta").value("****1332"))
+            .andExpect(jsonPath("$.descripcion").value("Detalle de la cuenta"))
+            .andExpect(jsonPath("$.activo").value(true))
+            .andExpect(jsonPath("$.fechaApertura").value("2024-01-15"))
+            .andExpect(content().string(not(containsString("ES91 2100"))));
+
+        assertThat(jdbcTemplate.queryForObject(
+            "select numero_cuenta from cuenta_financiera where portafolio_id = ?",
+            String.class,
+            portafolio))
+            .isEqualTo("ES91 2100 0418 4502 0005 1332");
+        assertThat(jdbcTemplate.queryForObject(
+            "select descripcion from cuenta_financiera where portafolio_id = ?",
+            String.class,
+            portafolio))
+            .isEqualTo("Detalle de la cuenta");
+    }
+
+    @Test
+    void crear_conNumeroDuplicadoEnLaInstitucion_devuelve409() throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio duplicado", true);
+        crearMembresia(usuarioId, portafolio, "EDITOR");
+        MockHttpSession sesion = iniciarSesion();
+        insertarCuenta(portafolio, "Cuenta existente", "123456", true, null, null);
+
+        mockMvc.perform(post(RUTA, portafolio)
+                .session(sesion)
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "institucionId": "%s",
+                      "tipoCuentaId": "%s",
+                      "monedaId": "%s",
+                      "nombre": "Cuenta duplicada",
+                      "numeroCuenta": "123456"
+                    }
+                    """.formatted(institucionId, tipoCuentaId, monedaId)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("CUENTA_DUPLICADA"));
+    }
+
+    @Test
+    void crear_conRolLector_devuelve403() throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio de solo lectura", true);
+        crearMembresia(usuarioId, portafolio);
+
+        mockMvc.perform(post(RUTA, portafolio)
+                .session(iniciarSesion())
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "institucionId": "%s",
+                      "tipoCuentaId": "%s",
+                      "monedaId": "%s",
+                      "nombre": "Cuenta"
+                    }
+                    """.formatted(institucionId, tipoCuentaId, monedaId)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESO_DENEGADO"));
+    }
+
+    @Test
+    void crear_conInstitucionInexistente_devuelve422() throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio con relación inválida", true);
+        crearMembresia(usuarioId, portafolio, "EDITOR");
+
+        mockMvc.perform(post(RUTA, portafolio)
+                .session(iniciarSesion())
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "institucionId": "%s",
+                      "tipoCuentaId": "%s",
+                      "monedaId": "%s",
+                      "nombre": "Cuenta"
+                    }
+                    """.formatted(UUID.randomUUID(), tipoCuentaId, monedaId)))
+            .andExpect(status().isUnprocessableContent())
+            .andExpect(jsonPath("$.code").value("CUENTA_INVALIDA"));
+    }
+
+    @Test
+    void actualizar_modificaLaCuentaYNoAceptaCuentasDeOtroPortafolio()
+        throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio de edición", true);
+        UUID otroPortafolio = crearPortafolio("Portafolio ajeno", true);
+        crearMembresia(usuarioId, portafolio, "EDITOR");
+        MockHttpSession sesion = iniciarSesion();
+        UUID cuenta = insertarCuenta(
+            portafolio, "Cuenta original", "1234", true,
+            LocalDate.of(2024, 1, 1), null);
+        UUID ajena = insertarCuenta(
+            otroPortafolio, "Cuenta ajena", null, true, null, null);
+
+        mockMvc.perform(put(RUTA + "/{cuentaId}", portafolio, cuenta)
+                .session(sesion)
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "institucionId": "%s",
+                      "tipoCuentaId": "%s",
+                      "monedaId": "%s",
+                      "nombre": "Cuenta editada",
+                      "descripcion": "Nueva descripción",
+                      "numeroCuenta": "987654",
+                      "fechaApertura": "2024-02-01"
+                    }
+                    """.formatted(institucionId, tipoCuentaId, monedaId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.nombre").value("Cuenta editada"))
+            .andExpect(jsonPath("$.descripcion").value("Nueva descripción"))
+            .andExpect(jsonPath("$.numeroCuenta").value("****7654"))
+            .andExpect(jsonPath("$.fechaApertura").value("2024-02-01"));
+
+        mockMvc.perform(put(RUTA + "/{cuentaId}", portafolio, ajena)
+                .session(sesion)
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "institucionId": "%s",
+                      "tipoCuentaId": "%s",
+                      "monedaId": "%s",
+                      "nombre": "Intento ajeno"
+                    }
+                    """.formatted(institucionId, tipoCuentaId, monedaId)))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void cambiarEstado_desactivaYReactivaLaCuenta() throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio de estado", true);
+        crearMembresia(usuarioId, portafolio, "EDITOR");
+        MockHttpSession sesion = iniciarSesion();
+        UUID cuenta = insertarCuenta(
+            portafolio, "Cuenta de estado", null, true,
+            LocalDate.of(2024, 1, 1), null);
+
+        mockMvc.perform(patch(RUTA + "/{cuentaId}/estado", portafolio, cuenta)
+                .session(sesion)
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"activo\": false}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.activo").value(false))
+            .andExpect(jsonPath("$.fechaCierre").isNotEmpty());
+
+        mockMvc.perform(patch(RUTA + "/{cuentaId}/estado", portafolio, cuenta)
+                .session(sesion)
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"activo\": true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.activo").value(true))
+            .andExpect(jsonPath("$.fechaCierre").value(nullValue()));
+    }
+
+    @Test
+    void cambiarEstado_conRolLector_devuelve403() throws Exception {
+        UUID portafolio = crearPortafolio("Portafolio de solo lectura", true);
+        crearMembresia(usuarioId, portafolio);
+        UUID cuenta = insertarCuenta(
+            portafolio, "Cuenta", null, true, null, null);
+
+        mockMvc.perform(patch(RUTA + "/{cuentaId}/estado", portafolio, cuenta)
+                .session(iniciarSesion())
+                .with(CsrfTestSupport.conCsrf(mockMvc))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"activo\": false}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESO_DENEGADO"));
+    }
+
+    @Test
+    void tiposCuenta_listaSoloLosActivos() throws Exception {
+        jdbcTemplate.update("""
+            insert into tipo_cuenta (id, nombre, activo) values (?, ?, false)
+            """, UUID.randomUUID(), "Tipo inactivo");
+
+        mockMvc.perform(get("/api/v1/tipos-cuenta").session(iniciarSesion()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(1)))
+            .andExpect(jsonPath("$[0].id").value(tipoCuentaId.toString()))
+            .andExpect(jsonPath("$[0].nombre").value("Corriente"))
+            .andExpect(jsonPath("$[0].activo").value(true));
+    }
+
+    private UUID insertarCuentaEn(
+        UUID portafolioId,
+        String nombre,
+        UUID institucion,
+        UUID tipoCuenta,
+        String numeroCuenta,
+        boolean activo
+    ) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update("""
+            insert into cuenta_financiera
+                (id, portafolio_id, institucion_id, tipo_cuenta_id, nombre,
+                 numero_cuenta, moneda_id, activo)
+            values (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            id, portafolioId, institucion, tipoCuenta, nombre,
+            numeroCuenta, monedaId, activo);
+        return id;
+    }
+
     private MockHttpSession iniciarSesion() throws Exception {
         MvcResult resultado = mockMvc.perform(post("/api/auth/login")
                 .with(CsrfTestSupport.conCsrf(mockMvc))
@@ -323,10 +640,14 @@ class CuentaFinancieraApiIT {
     }
 
     private void crearMembresia(UUID usuario, UUID portafolio) {
+        crearMembresia(usuario, portafolio, "LECTOR");
+    }
+
+    private void crearMembresia(UUID usuario, UUID portafolio, String rol) {
         jdbcTemplate.update("""
             insert into membresia (id, usuario_id, portafolio_id, rol)
             values (?, ?, ?, ?)
-            """, UUID.randomUUID(), usuario, portafolio, "LECTOR");
+            """, UUID.randomUUID(), usuario, portafolio, rol);
     }
 
     private UUID crearPortafolio(String nombre, boolean activo) {

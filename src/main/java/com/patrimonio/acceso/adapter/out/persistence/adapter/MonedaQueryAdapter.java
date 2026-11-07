@@ -34,6 +34,12 @@ public class MonedaQueryAdapter implements MonedaQueryPort {
             .map(MonedaQueryAdapter::toResumen);
     }
 
+    @Override
+    public Optional<MonedaResumen> buscarPorId(UUID monedaId) {
+        return repository.findById(monedaId)
+            .map(MonedaQueryAdapter::toResumen);
+    }
+
     private static MonedaResumen toResumen(MonedaEntity moneda) {
         return new MonedaResumen(
             moneda.getId(),

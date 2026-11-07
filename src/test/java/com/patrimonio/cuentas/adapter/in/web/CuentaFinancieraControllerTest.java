@@ -13,6 +13,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.patrimonio.acceso.api.dto.UsuarioAutenticado;
+import com.patrimonio.cuentas.application.port.in.ActualizarCuentaUseCase;
+import com.patrimonio.cuentas.application.port.in.CambiarEstadoCuentaUseCase;
+import com.patrimonio.cuentas.application.port.in.ConsultarCuentaUseCase;
+import com.patrimonio.cuentas.application.port.in.CrearCuentaUseCase;
 import com.patrimonio.cuentas.application.port.in.ListarCuentasPorPortafolioUseCase;
 import com.patrimonio.cuentas.application.query.ListarCuentasPorPortafolioQuery;
 import com.patrimonio.cuentas.application.view.CuentaFinancieraView;
@@ -66,6 +70,18 @@ class CuentaFinancieraControllerTest {
 
     @MockitoBean
     private ListarCuentasPorPortafolioUseCase listarCuentas;
+
+    @MockitoBean
+    private ConsultarCuentaUseCase consultarCuenta;
+
+    @MockitoBean
+    private CrearCuentaUseCase crearCuenta;
+
+    @MockitoBean
+    private ActualizarCuentaUseCase actualizarCuenta;
+
+    @MockitoBean
+    private CambiarEstadoCuentaUseCase cambiarEstadoCuenta;
 
     @BeforeEach
     void establecerContextoDeSeguridad() {

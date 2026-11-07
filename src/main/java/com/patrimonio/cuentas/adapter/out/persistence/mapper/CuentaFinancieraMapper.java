@@ -28,6 +28,7 @@ public class CuentaFinancieraMapper {
                 entity.getInstitucionId(),
                 entity.getTipoCuentaId(),
                 entity.getNombre(),
+                entity.getDescripcion(),
                 numeroCuenta,
                 entity.getMonedaId(),
                 entity.isActivo(),
@@ -39,5 +40,41 @@ public class CuentaFinancieraMapper {
                 "La cuenta financiera almacenada no cumple las invariantes de dominio.",
                 ex);
         }
+    }
+
+    public CuentaFinancieraEntity toEntity(CuentaFinanciera cuenta) {
+        return new CuentaFinancieraEntity(
+            cuenta.id(),
+            cuenta.portafolioId(),
+            cuenta.institucionId(),
+            cuenta.tipoCuentaId(),
+            cuenta.nombre(),
+            cuenta.descripcion().orElse(null),
+            cuenta.numeroCuenta().map(NumeroCuenta::valor).orElse(null),
+            cuenta.monedaId(),
+            cuenta.activo(),
+            cuenta.fechaApertura().orElse(null),
+            cuenta.fechaCierre().orElse(null)
+        );
+    }
+
+    /**
+     * Copia los datos editables del agregado sobre una entidad administrada.
+     */
+    public void actualizarEntidad(
+        CuentaFinancieraEntity entity,
+        CuentaFinanciera cuenta
+    ) {
+        entity.actualizar(
+            cuenta.institucionId(),
+            cuenta.tipoCuentaId(),
+            cuenta.nombre(),
+            cuenta.descripcion().orElse(null),
+            cuenta.numeroCuenta().map(NumeroCuenta::valor).orElse(null),
+            cuenta.monedaId(),
+            cuenta.activo(),
+            cuenta.fechaApertura().orElse(null),
+            cuenta.fechaCierre().orElse(null)
+        );
     }
 }

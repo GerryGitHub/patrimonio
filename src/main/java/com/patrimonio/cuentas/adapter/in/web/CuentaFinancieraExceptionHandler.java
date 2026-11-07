@@ -1,5 +1,7 @@
 package com.patrimonio.cuentas.adapter.in.web;
 
+import com.patrimonio.cuentas.domain.error.CuentaDuplicadaException;
+import com.patrimonio.cuentas.domain.error.InstitucionDuplicadaException;
 import com.patrimonio.shared.domain.error.AccesoDenegadoException;
 import com.patrimonio.shared.domain.error.DatosPersistidosInvalidos;
 import com.patrimonio.shared.domain.error.DomainException;
@@ -63,6 +65,14 @@ public class CuentaFinancieraExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, ex.codigo(), ex.getMessage());
     }
 
+    @ExceptionHandler({
+        InstitucionDuplicadaException.class,
+        CuentaDuplicadaException.class
+    })
+    public ProblemDetail handleDuplicado(DomainException ex) {
+        return problem(HttpStatus.CONFLICT, ex.codigo(), ex.getMessage());
+    }
+
     @ExceptionHandler(DatosPersistidosInvalidos.class)
     public ProblemDetail handleDatosInconsistentes(DatosPersistidosInvalidos ex) {
         // La traza queda en el log; el cliente recibe un mensaje genérico.
@@ -111,6 +121,7 @@ public class CuentaFinancieraExceptionHandler {
             case 403 -> "Acceso denegado";
             case 404 -> "Recurso no encontrado";
             case 405 -> "Método no permitido";
+            case 409 -> "Conflicto";
             case 406 -> "Tipo de respuesta no soportado";
             case 415 -> "Tipo de contenido no soportado";
             case 422 -> "Regla de negocio incumplida";

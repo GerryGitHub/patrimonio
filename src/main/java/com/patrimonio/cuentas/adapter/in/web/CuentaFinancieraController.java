@@ -12,6 +12,7 @@ import com.patrimonio.cuentas.application.port.in.ListarCuentasPorPortafolioUseC
 import com.patrimonio.cuentas.application.query.ConsultarCuentaQuery;
 import com.patrimonio.cuentas.application.query.ListarCuentasPorPortafolioQuery;
 import com.patrimonio.cuentas.application.view.CuentaFinancieraView;
+import com.patrimonio.shared.adapter.in.web.PerfilDeDesarrolloExplicito;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;

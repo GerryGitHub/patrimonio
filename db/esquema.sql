@@ -158,17 +158,22 @@ CREATE UNIQUE INDEX uq_cuenta_financiera_numero
 -- ---------------------------------------------------------------------
 
 CREATE TABLE instrumento (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tipo_instrumento_id uuid NOT NULL REFERENCES tipo_instrumento (id) ON DELETE RESTRICT,
-    nombre              varchar(200) NOT NULL,
-    simbolo             varchar(32),
-    emisor              varchar(150),
-    moneda_id           uuid NOT NULL REFERENCES moneda (id) ON DELETE RESTRICT,
-    descripcion         varchar(500),
-    activo              boolean NOT NULL DEFAULT true
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo_instrumento_id   uuid NOT NULL REFERENCES tipo_instrumento (id) ON DELETE RESTRICT,
+    nombre                varchar(200) NOT NULL,
+    simbolo               varchar(32),
+    emisor                varchar(150),
+    mercado               varchar(100),
+    moneda_id             uuid NOT NULL REFERENCES moneda (id) ON DELETE RESTRICT,
+    identificador_externo varchar(100),
+    descripcion           varchar(500),
+    activo                boolean NOT NULL DEFAULT true,
+    fecha_creacion        timestamptz NOT NULL DEFAULT now(),
+    fecha_actualizacion   timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_instrumento_tipo ON instrumento (tipo_instrumento_id);
 CREATE INDEX idx_instrumento_moneda ON instrumento (moneda_id);
+CREATE INDEX idx_instrumento_mercado ON instrumento (mercado);
 CREATE UNIQUE INDEX uq_instrumento_simbolo_moneda
     ON instrumento (simbolo, moneda_id)
     WHERE simbolo IS NOT NULL;
@@ -183,6 +188,10 @@ CREATE TABLE identificador_instrumento (
     CONSTRAINT uq_identificador_instrumento_tipo UNIQUE (instrumento_id, tipo)
 );
 CREATE INDEX idx_identificador_instrumento_valor ON identificador_instrumento (tipo, valor);
+-- El ISIN es unico a nivel global mientras el identificador este activo.
+CREATE UNIQUE INDEX uq_identificador_instrumento_isin
+    ON identificador_instrumento (valor)
+    WHERE tipo = 'ISIN' AND activo;
 
 -- ---------------------------------------------------------------------
 -- 5. Posiciones, movimientos y contratos
@@ -198,15 +207,20 @@ CREATE TABLE posicion (
     cantidad            numeric(28,10) NOT NULL DEFAULT 0,
     precio_promedio     numeric(24,8) NOT NULL DEFAULT 0,
     moneda_id           uuid NOT NULL REFERENCES moneda (id) ON DELETE RESTRICT,
+    observaciones       varchar(500),
     activo              boolean NOT NULL DEFAULT true,
     fecha_apertura      timestamptz NOT NULL DEFAULT now(),
+    fecha_creacion      timestamptz NOT NULL DEFAULT now(),
     fecha_actualizacion timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT ck_posicion_cantidad CHECK (cantidad >= 0),
     CONSTRAINT ck_posicion_precio_promedio CHECK (precio_promedio >= 0),
     CONSTRAINT ck_posicion_fechas CHECK (fecha_actualizacion >= fecha_apertura)
 );
 CREATE INDEX idx_posicion_cuenta ON posicion (cuenta_id);
 CREATE INDEX idx_posicion_instrumento ON posicion (instrumento_id);
 CREATE INDEX idx_posicion_moneda ON posicion (moneda_id);
+CREATE INDEX idx_posicion_cuenta_instrumento
+    ON posicion (cuenta_id, instrumento_id);
 
 CREATE TABLE contrato_inversion (
     id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),

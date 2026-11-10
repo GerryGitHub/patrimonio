@@ -40,6 +40,7 @@ patrimonio/
 | `docs/schema-change-proposal-v2.md` / `.sql` | Propuesta v2 corregida (no aplicada) |
 | `docs/backend-bootstrap.md` | Stack, perfiles, variables de entorno, pruebas y comandos del backend |
 | `docs/cuentas-financieras.md` | Endpoint de consulta de cuentas, arquitectura, mapeo, pruebas y limitación de seguridad |
+| `docs/inversiones.md` | Catálogo de instrumentos, posiciones, endpoints, compatibilidad, esquema y pruebas de la Entrega 2 |
 | `docs/seguridad-autenticacion.md` | Estrategia de sesión, CSRF, autorización por membresía, pruebas y limitaciones |
 
 > Las propuestas son documentación de diseño: **no se han ejecutado** contra la
@@ -86,6 +87,27 @@ GET  /api/v1/portafolios
 POST /api/v1/portafolios
 GET  /api/v1/portafolios/{portafolioId}/cuentas
 ```
+
+Instrumentos y posiciones (requieren sesión y perfil local/test explícito):
+
+```http
+GET   /api/v1/instrumentos
+POST  /api/v1/instrumentos
+GET   /api/v1/instrumentos/{id}
+PUT   /api/v1/instrumentos/{id}
+PATCH /api/v1/instrumentos/{id}/estado
+GET   /api/v1/portafolios/{portafolioId}/posiciones
+POST  /api/v1/portafolios/{portafolioId}/posiciones
+GET   /api/v1/portafolios/{portafolioId}/posiciones/{id}
+PUT   /api/v1/portafolios/{portafolioId}/posiciones/{id}
+PATCH /api/v1/portafolios/{portafolioId}/posiciones/{id}/estado
+GET   /api/v1/portafolios/{portafolioId}/posiciones/resumen
+```
+
+El catálogo de instrumentos es global y compartido. Las posiciones pertenecen a
+una cuenta del portafolio; el costo total es `cantidad × costo unitario` y no
+representa valor de mercado. Los detalles, reglas de compatibilidad y cambios de
+esquema están en [`docs/inversiones.md`](docs/inversiones.md).
 
 `GET /api/v1/monedas` devuelve el catálogo real de monedas activas, ordenado por
 código. Es la única fuente del selector de moneda base: el cliente no mantiene
@@ -148,6 +170,13 @@ portafolios ni cuentas:
 
 ```bash
 psql -v ON_ERROR_STOP=1 -f db/esquema.sql
+psql -v ON_ERROR_STOP=1 -f db/datos-iniciales.sql
+```
+
+En bases existentes, la Entrega 2 se aplica sin cambios destructivos:
+
+```bash
+psql -v ON_ERROR_STOP=1 -f db/esquema-entrega2.sql
 psql -v ON_ERROR_STOP=1 -f db/datos-iniciales.sql
 ```
 

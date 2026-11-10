@@ -26,6 +26,10 @@ patrimonio:
       # Debe permanecer en false en produccion hasta que existan autenticacion
       # y autorizacion verificables por membresia.
       expuesta: false
+    inversiones:
+      # Los endpoints de instrumentos y posiciones solo se registran si esta
+      # propiedad es true y el perfil local o test esta activo explicitamente.
+      expuesta: false
   seguridad:
     sesion:
       # Limite absoluto de la sesion autenticada, independiente de la

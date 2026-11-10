@@ -7,6 +7,7 @@ import com.patrimonio.cuentas.application.port.in.CrearInstitucionUseCase;
 import com.patrimonio.cuentas.application.port.in.ListarInstitucionesUseCase;
 import com.patrimonio.cuentas.application.query.ListarInstitucionesQuery;
 import com.patrimonio.cuentas.application.view.InstitucionView;
+import com.patrimonio.shared.adapter.in.web.PerfilDeDesarrolloExplicito;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;

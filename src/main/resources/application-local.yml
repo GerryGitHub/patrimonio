@@ -21,6 +21,9 @@ patrimonio:
     cuentas:
       # Solo en desarrollo local: no hay autenticacion ni autorizacion reales.
       expuesta: true
+    inversiones:
+      # Catalogo de instrumentos y posiciones en desarrollo local.
+      expuesta: true
 
 logging:
   level:

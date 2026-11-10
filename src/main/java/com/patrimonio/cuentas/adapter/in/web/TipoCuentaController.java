@@ -2,6 +2,7 @@ package com.patrimonio.cuentas.adapter.in.web;
 
 import com.patrimonio.cuentas.application.port.in.ListarTiposCuentaUseCase;
 import com.patrimonio.cuentas.application.view.TipoCuentaView;
+import com.patrimonio.shared.adapter.in.web.PerfilDeDesarrolloExplicito;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Conditional;

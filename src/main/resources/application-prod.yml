@@ -24,6 +24,9 @@ patrimonio:
     cuentas:
       # Explicito: el endpoint no se expone en produccion sin autenticacion.
       expuesta: false
+    inversiones:
+      # Explicito: los endpoints no se exponen en produccion.
+      expuesta: false
 
 logging:
   level:

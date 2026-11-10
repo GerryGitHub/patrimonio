@@ -44,4 +44,35 @@ INSERT INTO tipo_cuenta (nombre, descripcion, activo) VALUES
     ('Otra',                'Otro tipo de cuenta financiera', true)
 ON CONFLICT (nombre) DO NOTHING;
 
+-- ---------------------------------------------------------------------
+-- Clases de activo y tipos de instrumento
+--
+-- La clasificacion es extensible: una clase nueva solo requiere una fila
+-- en clase_activo y sus tipos en tipo_instrumento. Los pagarés y depósitos
+-- a plazo de bancos o SOFIPOs NO se modelan aqui: corresponden a contratos
+-- de inversión en la siguiente entrega.
+-- ---------------------------------------------------------------------
+INSERT INTO clase_activo (nombre, descripcion, activo) VALUES
+    ('Renta variable',  'Acciones, ETFs y otros instrumentos cotizados', true),
+    ('Renta fija',      'Instrumentos de deuda negociables', true),
+    ('Activos digitales', 'Criptomonedas y otros activos digitales negociables', true)
+ON CONFLICT (nombre) DO NOTHING;
+
+INSERT INTO tipo_instrumento (clase_activo_id, nombre, descripcion, activo)
+SELECT c.id, v.nombre, v.descripcion, true
+FROM (
+    VALUES
+        ('Renta variable', 'Acción', 'Participación accionaria cotizada'),
+        ('Renta variable', 'ETF', 'Fondo cotizado de inversión'),
+        ('Renta variable', 'Otro instrumento cotizado', 'Otro instrumento de renta variable'),
+        ('Renta fija', 'CETE', 'Certificado de tesorería'),
+        ('Renta fija', 'Bono gubernamental', 'Deuda emitida por un gobierno'),
+        ('Renta fija', 'Bono corporativo', 'Deuda emitida por una empresa'),
+        ('Renta fija', 'Otro instrumento de deuda negociable', 'Otro instrumento de renta fija'),
+        ('Activos digitales', 'Criptomoneda', 'Activo digital negociable'),
+        ('Activos digitales', 'Otro activo digital negociable', 'Otro activo digital')
+) AS v(clase, nombre, descripcion)
+JOIN clase_activo c ON c.nombre = v.clase
+ON CONFLICT (clase_activo_id, nombre) DO NOTHING;
+
 COMMIT;

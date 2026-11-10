@@ -15,3 +15,6 @@ patrimonio:
     cuentas:
       # Las pruebas ejercitan el contrato HTTP completo.
       expuesta: true
+    inversiones:
+      # Las pruebas ejercitan el contrato HTTP completo.
+      expuesta: true

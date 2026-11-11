@@ -97,6 +97,22 @@ public class MovimientoRepositoryAdapter implements MovimientoRepository {
     }
 
     @Override
+    public List<Movimiento> listarPorPortafolio(
+        UUID portafolioId,
+        LocalDate desde,
+        LocalDate hasta
+    ) {
+        LocalDate inicio = desde == null ? FECHA_MINIMA : desde;
+        LocalDate fin = hasta == null ? FECHA_MAXIMA : hasta;
+        Map<UUID, TipoMovimiento> mapa = mapaDeTipos();
+        return movimientos
+            .listarPorPortafolio(portafolioId, inicio, fin)
+            .stream()
+            .map(entity -> mapper.toDomain(entity, mapa))
+            .toList();
+    }
+
+    @Override
     public List<Movimiento> listarPorPosicion(UUID posicionId) {
         Map<UUID, TipoMovimiento> mapa = mapaDeTipos();
         return movimientos

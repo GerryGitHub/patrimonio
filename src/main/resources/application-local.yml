@@ -24,6 +24,9 @@ patrimonio:
     inversiones:
       # Catalogo de instrumentos y posiciones en desarrollo local.
       expuesta: true
+    consolidacion:
+      # Centro de Patrimonio consolidado en desarrollo local.
+      expuesta: true
 
 logging:
   level:

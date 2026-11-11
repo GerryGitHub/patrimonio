@@ -27,6 +27,9 @@ patrimonio:
     inversiones:
       # Explicito: los endpoints no se exponen en produccion.
       expuesta: false
+    consolidacion:
+      # Explicito: el Centro de Patrimonio no se expone en produccion.
+      expuesta: false
 
 logging:
   level:

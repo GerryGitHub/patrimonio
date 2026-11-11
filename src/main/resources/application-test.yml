@@ -18,3 +18,6 @@ patrimonio:
     inversiones:
       # Las pruebas ejercitan el contrato HTTP completo.
       expuesta: true
+    consolidacion:
+      # Las pruebas ejercitan el contrato HTTP completo.
+      expuesta: true

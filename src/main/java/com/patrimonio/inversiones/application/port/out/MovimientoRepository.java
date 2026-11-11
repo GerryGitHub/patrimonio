@@ -3,6 +3,7 @@ package com.patrimonio.inversiones.application.port.out;
 import com.patrimonio.inversiones.application.query.FiltroMovimientos;
 import com.patrimonio.inversiones.application.query.PaginaMovimientos;
 import com.patrimonio.inversiones.domain.model.Movimiento;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +32,18 @@ public interface MovimientoRepository {
     boolean existePorPosicion(UUID posicionId);
 
     List<Movimiento> listarPorPosicion(UUID posicionId);
+
+    /**
+     * Historial confirmado de un portafolio en un rango inclusivo.
+     *
+     * <p>Es una consulta de solo lectura para la consolidación patrimonial.
+     * Cualquiera de los extremos puede ser {@code null}. No modifica el motor
+     * de movimientos ni recalcula efectos: devuelve los valores almacenados.</p>
+     */
+    List<Movimiento> listarPorPortafolio(
+        UUID portafolioId,
+        LocalDate desde,
+        LocalDate hasta);
 
     PaginaMovimientos listarPorPosicion(
         UUID posicionId,

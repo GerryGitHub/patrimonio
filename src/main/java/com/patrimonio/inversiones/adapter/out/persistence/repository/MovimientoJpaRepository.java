@@ -28,6 +28,19 @@ public interface MovimientoJpaRepository
 
     boolean existsByPosicionId(UUID posicionId);
 
+    @Query("""
+        select m
+        from MovimientoEntity m
+        where m.portafolioId = :portafolioId
+          and m.fechaOperacion >= :desde
+          and m.fechaOperacion <= :hasta
+        order by m.fechaOperacion asc, m.fechaCreacion asc
+        """)
+    List<MovimientoEntity> listarPorPortafolio(
+        @Param("portafolioId") UUID portafolioId,
+        @Param("desde") LocalDate desde,
+        @Param("hasta") LocalDate hasta);
+
     List<MovimientoEntity>
         findByPosicionIdOrderByFechaOperacionAscFechaCreacionAsc(
             UUID posicionId);

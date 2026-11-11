@@ -30,6 +30,10 @@ patrimonio:
       # Los endpoints de instrumentos y posiciones solo se registran si esta
       # propiedad es true y el perfil local o test esta activo explicitamente.
       expuesta: false
+    consolidacion:
+      # El Centro de Patrimonio solo se registra si esta propiedad es true y
+      # el perfil local o test esta activo explicitamente.
+      expuesta: false
   seguridad:
     sesion:
       # Limite absoluto de la sesion autenticada, independiente de la

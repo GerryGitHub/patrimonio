@@ -1,17 +1,18 @@
 # Patrimonio — Base de datos PostgreSQL y backend
 
 Infraestructura de base de datos para el proyecto **Patrimonio**: un único
-contenedor PostgreSQL 16 gestionado con Docker Compose, más el esquema inicial de
-20 tablas aplicado directamente con `psql`. Incluye además el bootstrap del
-backend en Spring Boot sobre Java 25.
+contenedor PostgreSQL 16 gestionado con Docker Compose, más el esquema de
+21 tablas aplicado directamente con `psql`. Incluye además el backend en Spring
+Boot sobre Java 25 con arquitectura hexagonal.
 
-Estado actual: **base de datos y backend con seguridad MVP**. La base
-PostgreSQL contiene el esquema inicial de 20 tablas y el módulo `cuentas`
-expone una consulta de solo lectura de cuentas financieras por portafolio,
-protegida por sesión de servidor y autorización por membresía. No hay todavía
-frontend ni registro de usuarios, y no se usa ningún sistema de migraciones
-(nada de Flyway ni Liquibase). El DDL aplicado está en `db/esquema.sql`; en
-`docs/` viven la revisión y las propuestas de evolución (aún **no aplicadas**).
+Estado actual: **Entregas 1 a 4 completadas**. La base PostgreSQL contiene el
+esquema de 21 tablas; los módulos `cuentas`, `inversiones` y `consolidacion`
+exponen cuentas, instrumentos, posiciones, movimientos y el Centro de Patrimonio
+consolidado, protegidos por sesión de servidor y autorización por membresía. No
+se usa ningún sistema de migraciones (nada de Flyway ni Liquibase): los cambios
+son scripts aditivos en `db/`. El DDL aplicado está en `db/esquema.sql`; en
+`docs/` viven la revisión, las propuestas de evolución y la documentación de
+cada módulo.
 
 ## Estructura
 
@@ -42,6 +43,7 @@ patrimonio/
 | `docs/cuentas-financieras.md` | Endpoint de consulta de cuentas, arquitectura, mapeo, pruebas y limitación de seguridad |
 | `docs/inversiones.md` | Catálogo de instrumentos, posiciones, movimientos, endpoints, compatibilidad, esquema y pruebas de las Entregas 2 y 3 |
 | `docs/movimientos.md` | Motor de movimientos, cálculos, idempotencia, concurrencia, reversión, reconstrucción y migración de la Entrega 3 |
+| `docs/centro-patrimonio.md` | Centro de Patrimonio consolidado, multi-moneda, cobertura, snapshots, endpoints y migración de la Entrega 4 |
 | `docs/seguridad-autenticacion.md` | Estrategia de sesión, CSRF, autorización por membresía, pruebas y limitaciones |
 
 > Las propuestas son documentación de diseño: **no se han ejecutado** contra la
@@ -111,12 +113,43 @@ GET   /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/resumen
 POST  /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/reconstruccion
 ```
 
+Centro de Patrimonio (requieren sesión y perfil local/test explícito):
+
+```http
+GET  /api/v1/portafolios/{portafolioId}/patrimonio/centro
+GET  /api/v1/portafolios/{portafolioId}/patrimonio/resumen
+GET  /api/v1/portafolios/{portafolioId}/patrimonio/distribucion
+GET  /api/v1/portafolios/{portafolioId}/patrimonio/evolucion
+GET  /api/v1/portafolios/{portafolioId}/patrimonio/rendimientos
+GET  /api/v1/portafolios/{portafolioId}/patrimonio/liquidez
+GET  /api/v1/portafolios/{portafolioId}/patrimonio/eventos
+GET  /api/v1/portafolios/{portafolioId}/patrimonio/snapshots
+POST /api/v1/portafolios/{portafolioId}/patrimonio/snapshots
+
+GET  /api/v1/patrimonio/centro
+GET  /api/v1/patrimonio/resumen
+GET  /api/v1/patrimonio/distribucion
+GET  /api/v1/patrimonio/evolucion
+GET  /api/v1/patrimonio/rendimientos
+GET  /api/v1/patrimonio/liquidez
+GET  /api/v1/patrimonio/eventos
+```
+
 El catálogo de instrumentos es global y compartido. Las posiciones pertenecen a
 una cuenta del portafolio y su cantidad/costo es un estado materializado de los
 movimientos confirmados. El costo total es de adquisición y no representa valor
 de mercado. Los detalles, reglas de compatibilidad, cálculos y cambios de esquema
 están en [`docs/inversiones.md`](docs/inversiones.md) y
 [`docs/movimientos.md`](docs/movimientos.md).
+
+El Centro de Patrimonio consolida los activos registrados de uno o todos los
+portafolios autorizados. **No convierte monedas ni suma divisas distintas**:
+cada importe conserva su moneda y los porcentajes se calculan por moneda. El
+efectivo, los pasivos, el valor de mercado y el patrimonio neto completo se
+devuelven como `NO_DISPONIBLE` con un motivo, nunca como cero. Los snapshots son
+manuales, solo de la fecha actual, idempotentes y guardan `NULL` en los campos
+sin fuente. El contrato completo, los parámetros, la cobertura y la migración
+están en [`docs/centro-patrimonio.md`](docs/centro-patrimonio.md).
 
 `GET /api/v1/monedas` devuelve el catálogo real de monedas activas, ordenado por
 código. Es la única fuente del selector de moneda base: el cliente no mantiene
@@ -160,6 +193,12 @@ SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
 En `prod` el endpoint de cuentas responde `404` y el arranque falla si se fuerza
 `patrimonio.api.cuentas.expuesta=true`.
 
+Los endpoints de instrumentos, posiciones, movimientos y Centro de Patrimonio
+siguen el mismo patrón: exigen el perfil `local` o `test` activo de forma
+explícita y `patrimonio.api.inversiones.expuesta` o
+`patrimonio.api.consolidacion.expuesta` en `true`. En `prod` ambos valores son
+`false` y el arranque falla si se fuerzan a `true`.
+
 Los detalles de la estrategia, el ciclo de sesión, CSRF, la autorización y las
 pruebas están en
 [`docs/seguridad-autenticacion.md`](docs/seguridad-autenticacion.md). La
@@ -172,26 +211,28 @@ completo desde una base vacía (crear usuario, login y datos con SQL).
 
 ## Esquema de datos
 
-El esquema se aplicó directamente en la base `patrimonio` (20 tablas, 20 PK,
-28 FK, 12 UNIQUE, 18 CHECK, 62 índices). El catálogo mínimo de monedas se carga
-con `db/datos-iniciales.sql`, un script idempotente que no crea usuarios,
-portafolios ni cuentas:
+El esquema se aplicó directamente en la base `patrimonio` (21 tablas). El
+catálogo mínimo de monedas se carga con `db/datos-iniciales.sql`, un script
+idempotente que no crea usuarios, portafolios ni cuentas:
 
 ```bash
 psql -v ON_ERROR_STOP=1 -f db/esquema.sql
 psql -v ON_ERROR_STOP=1 -f db/datos-iniciales.sql
 ```
 
-En bases existentes, las Entregas 2 y 3 se aplican sin cambios destructivos:
+En bases existentes, las Entregas 2, 3 y 4 se aplican sin cambios destructivos:
 
 ```bash
 psql -v ON_ERROR_STOP=1 -f db/esquema-entrega2.sql
 psql -v ON_ERROR_STOP=1 -f db/esquema-entrega3.sql
+psql -v ON_ERROR_STOP=1 -f db/esquema-entrega4.sql
 psql -v ON_ERROR_STOP=1 -f db/datos-iniciales.sql
 ```
 
 `db/esquema-entrega3.sql` convierte las posiciones existentes en movimientos
 `APERTURA` de forma idempotente y conserva sus UUID, cantidades, costos y fechas.
+`db/esquema-entrega4.sql` crea la tabla aditiva `snapshot_patrimonio` y sus
+restricciones; no modifica posiciones, movimientos ni datos históricos.
 
 | Grupo | Tablas |
 | ----- | ------ |
@@ -201,6 +242,7 @@ psql -v ON_ERROR_STOP=1 -f db/datos-iniciales.sql
 | Instrumentos | `instrumento`, `identificador_instrumento` |
 | Posiciones y operaciones | `posicion`, `movimiento`, `contrato_inversion`, `historial_tasa`, `pago_rendimiento` |
 | Mercado y valoración | `cotizacion`, `valoracion_historica` |
+| Consolidación | `snapshot_patrimonio` |
 
 Relaciones principales:
 

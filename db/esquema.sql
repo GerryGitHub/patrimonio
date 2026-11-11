@@ -401,4 +401,35 @@ CREATE TABLE tipo_cambio (
 );
 CREATE INDEX idx_tipo_cambio_destino ON tipo_cambio (moneda_destino_id, fecha DESC);
 
+-- ---------------------------------------------------------------------
+-- 8. Consolidacion patrimonial
+-- ---------------------------------------------------------------------
+
+-- Fotografia manual del patrimonio de un portafolio en una moneda.
+-- Los campos sin informacion confiable permanecen NULL: nunca se rellenan
+-- con el costo de adquisicion ni con ceros ficticios.
+CREATE TABLE snapshot_patrimonio (
+    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    portafolio_id       uuid NOT NULL REFERENCES portafolio (id) ON DELETE RESTRICT,
+    fecha               date NOT NULL,
+    moneda_id           uuid NOT NULL REFERENCES moneda (id) ON DELETE RESTRICT,
+    capital_invertido   numeric(28,10) NOT NULL DEFAULT 0,
+    resultado_realizado numeric(28,10) NOT NULL DEFAULT 0,
+    efectivo            numeric(28,10),
+    pasivos             numeric(28,10),
+    valor_mercado       numeric(28,10),
+    patrimonio_neto     numeric(28,10),
+    cobertura           varchar(500) NOT NULL,
+    limitaciones        varchar(1000),
+    fuente              varchar(50) NOT NULL,
+    fecha_creacion      timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT uq_snapshot_patrimonio
+        UNIQUE (portafolio_id, fecha, moneda_id, fuente),
+    CONSTRAINT ck_snapshot_capital CHECK (capital_invertido >= 0),
+    CONSTRAINT ck_snapshot_efectivo CHECK (efectivo IS NULL OR efectivo >= 0),
+    CONSTRAINT ck_snapshot_pasivos CHECK (pasivos IS NULL OR pasivos >= 0)
+);
+CREATE INDEX idx_snapshot_patrimonio_portafolio_fecha
+    ON snapshot_patrimonio (portafolio_id, fecha DESC, fecha_creacion DESC);
+
 COMMIT;

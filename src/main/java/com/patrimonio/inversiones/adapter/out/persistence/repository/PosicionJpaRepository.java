@@ -1,10 +1,13 @@
 package com.patrimonio.inversiones.adapter.out.persistence.repository;
 
 import com.patrimonio.inversiones.adapter.out.persistence.entity.PosicionEntity;
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -26,7 +29,7 @@ public interface PosicionJpaRepository
           and (:cuentaId is null or p.cuentaId = :cuentaId)
           and (:instrumentoId is null or p.instrumentoId = :instrumentoId)
           and (:activo is null or p.activo = :activo)
-        order by p.fechaApertura desc, p.id asc
+        order by p.fechaCreacion asc
         """)
     List<PosicionEntity> listarPorCuentas(
         @Param("cuentaIds") Collection<UUID> cuentaIds,
@@ -42,7 +45,7 @@ public interface PosicionJpaRepository
           and (:cuentaId is null or p.cuentaId = :cuentaId)
           and (:instrumentoId is null or p.instrumentoId = :instrumentoId)
           and (:activo is null or p.activo = :activo)
-        order by p.fechaApertura desc, p.id asc
+        order by p.fechaCreacion asc
         """)
     List<PosicionEntity> listarPorCuentasEInstrumentos(
         @Param("cuentaIds") Collection<UUID> cuentaIds,
@@ -50,4 +53,13 @@ public interface PosicionJpaRepository
         @Param("cuentaId") UUID cuentaId,
         @Param("instrumentoId") UUID instrumentoId,
         @Param("activo") Boolean activo);
+
+    /**
+     * Bloqueo pesimista para serializar movimientos concurrentes de una misma
+     * posición. Se mantiene hasta el commit de la transacción.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from PosicionEntity p where p.id = :posicionId")
+    Optional<PosicionEntity> buscarPorIdParaActualizar(
+        @Param("posicionId") UUID posicionId);
 }

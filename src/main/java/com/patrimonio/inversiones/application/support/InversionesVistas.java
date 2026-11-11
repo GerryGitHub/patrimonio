@@ -5,9 +5,11 @@ import com.patrimonio.acceso.api.port.MonedaCatalogoPort;
 import com.patrimonio.cuentas.api.dto.CuentaResumen;
 import com.patrimonio.inversiones.application.port.out.CatalogoInstrumentoRepository;
 import com.patrimonio.inversiones.application.view.InstrumentoView;
+import com.patrimonio.inversiones.application.view.MovimientoView;
 import com.patrimonio.inversiones.application.view.PosicionView;
 import com.patrimonio.inversiones.domain.model.ClaseActivo;
 import com.patrimonio.inversiones.domain.model.Instrumento;
+import com.patrimonio.inversiones.domain.model.Movimiento;
 import com.patrimonio.inversiones.domain.model.Posicion;
 import com.patrimonio.inversiones.domain.model.TipoInstrumento;
 import com.patrimonio.shared.domain.error.DatosPersistidosInvalidos;
@@ -16,13 +18,14 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
- * Resuelve las vistas de aplicación de instrumentos y posiciones.
+ * Resuelve las vistas de aplicación de instrumentos, posiciones y movimientos.
  *
  * <p>Agrupa las consultas a los catálogos para evitar una consulta por fila.
  * Si una referencia almacenada no existe, se falla con
@@ -170,6 +173,7 @@ public class InversionesVistas {
             posicion.cantidad(),
             posicion.costoUnitario(),
             posicion.costoTotal(),
+            posicion.resultadoRealizado(),
             instrumento.monedaId(),
             instrumento.monedaCodigo(),
             instrumento.monedaNombre(),
@@ -178,7 +182,85 @@ public class InversionesVistas {
             posicion.observaciones().orElse(null),
             posicion.activo(),
             posicion.fechaApertura().atZone(ZoneOffset.UTC).toLocalDate(),
+            posicion.fechaUltimoMovimiento().orElse(null),
             posicion.fechaCreacion(),
             posicion.fechaActualizacion());
+    }
+
+    /**
+     * Resuelve una lista de movimientos de una o varias posiciones.
+     */
+    public List<MovimientoView> movimientos(
+        List<Movimiento> movimientos,
+        List<Instrumento> instrumentos,
+        Map<UUID, CuentaResumen> cuentas,
+        Set<UUID> revertidos
+    ) {
+        Map<UUID, InstrumentoView> vistasInstrumento = instrumentos(instrumentos);
+        return movimientos.stream()
+            .map(movimiento -> {
+                InstrumentoView instrumento = vistasInstrumento.get(
+                    movimiento.instrumentoId());
+                if (instrumento == null) {
+                    throw new DatosPersistidosInvalidos(
+                        "El movimiento " + movimiento.id()
+                            + " referencia un instrumento inexistente.");
+                }
+                CuentaResumen cuenta = cuentas.get(movimiento.cuentaId());
+                if (cuenta == null) {
+                    throw new DatosPersistidosInvalidos(
+                        "El movimiento " + movimiento.id()
+                            + " referencia una cuenta inexistente.");
+                }
+                return movimiento(
+                    movimiento,
+                    instrumento,
+                    cuenta,
+                    revertidos.contains(movimiento.id()));
+            })
+            .toList();
+    }
+
+    public MovimientoView movimiento(
+        Movimiento movimiento,
+        InstrumentoView instrumento,
+        CuentaResumen cuenta,
+        boolean revertido
+    ) {
+        return new MovimientoView(
+            movimiento.id(),
+            movimiento.portafolioId(),
+            movimiento.cuentaId(),
+            cuenta.nombre(),
+            movimiento.posicionId(),
+            movimiento.instrumentoId(),
+            instrumento.nombre(),
+            instrumento.simbolo(),
+            movimiento.tipo(),
+            movimiento.tipo().etiqueta(),
+            movimiento.fechaOperacion(),
+            movimiento.fechaLiquidacion().orElse(null),
+            movimiento.cantidad(),
+            movimiento.precioUnitario(),
+            movimiento.importeBruto(),
+            movimiento.comisiones(),
+            movimiento.impuestos(),
+            instrumento.monedaId(),
+            instrumento.monedaCodigo(),
+            instrumento.monedaNombre(),
+            instrumento.monedaSimbolo(),
+            instrumento.monedaDecimales(),
+            movimiento.tipoCambio(),
+            movimiento.importeNeto(),
+            movimiento.costoAplicado(),
+            movimiento.resultadoRealizado().orElse(null),
+            movimiento.cantidadResultante(),
+            movimiento.costoResultante(),
+            movimiento.estado().name(),
+            movimiento.usuarioId().orElse(null),
+            movimiento.movimientoOrigenId().orElse(null),
+            revertido,
+            movimiento.observaciones().orElse(null),
+            movimiento.fechaCreacion());
     }
 }

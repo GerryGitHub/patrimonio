@@ -75,4 +75,20 @@ FROM (
 JOIN clase_activo c ON c.nombre = v.clase
 ON CONFLICT (clase_activo_id, nombre) DO NOTHING;
 
+-- ---------------------------------------------------------------------
+-- Tipos de movimiento del motor de posiciones
+--
+-- Solo se modelan operaciones que afectan la tenencia de una posicion.
+-- Dividendos, intereses, depositos y retiros de efectivo pertenecen a sus
+-- propios modulos y no se cargan aqui.
+-- ---------------------------------------------------------------------
+INSERT INTO tipo_movimiento (nombre, categoria, afecta_posicion, descripcion) VALUES
+    ('APERTURA',        'POSICION', true, 'Reconocimiento de una tenencia inicial.'),
+    ('COMPRA',          'POSICION', true, 'Incremento de cantidad y costo de adquisicion.'),
+    ('VENTA',           'POSICION', true, 'Reduccion de cantidad y reconocimiento del resultado realizado.'),
+    ('AJUSTE_POSITIVO', 'POSICION', true, 'Correccion justificada que aumenta cantidad y costo.'),
+    ('AJUSTE_NEGATIVO', 'POSICION', true, 'Correccion justificada que reduce cantidad y costo.'),
+    ('REVERSION',       'POSICION', true, 'Compensacion exacta de un movimiento confirmado.')
+ON CONFLICT (nombre) DO NOTHING;
+
 COMMIT;

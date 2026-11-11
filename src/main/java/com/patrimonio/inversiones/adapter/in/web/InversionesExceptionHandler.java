@@ -1,16 +1,20 @@
 package com.patrimonio.inversiones.adapter.in.web;
 
+import com.patrimonio.inversiones.domain.error.IdempotenciaConflictoException;
 import com.patrimonio.inversiones.domain.error.InstrumentoDuplicadoException;
+import com.patrimonio.inversiones.domain.error.MovimientoYaRevertidoException;
 import com.patrimonio.shared.domain.error.AccesoDenegadoException;
 import com.patrimonio.shared.domain.error.DatosPersistidosInvalidos;
 import com.patrimonio.shared.domain.error.DomainException;
 import com.patrimonio.shared.domain.error.NotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -26,7 +30,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
  */
 @RestControllerAdvice(basePackageClasses = {
     InstrumentoController.class,
-    PosicionController.class
+    PosicionController.class,
+    MovimientoController.class
 })
 public class InversionesExceptionHandler {
 
@@ -68,6 +73,27 @@ public class InversionesExceptionHandler {
     @ExceptionHandler(InstrumentoDuplicadoException.class)
     public ProblemDetail handleDuplicado(InstrumentoDuplicadoException ex) {
         return problem(HttpStatus.CONFLICT, ex.codigo(), ex.getMessage());
+    }
+
+    @ExceptionHandler({
+        IdempotenciaConflictoException.class,
+        MovimientoYaRevertidoException.class
+    })
+    public ProblemDetail handleConflictoDeMovimiento(DomainException ex) {
+        return problem(HttpStatus.CONFLICT, ex.codigo(), ex.getMessage());
+    }
+
+    @ExceptionHandler({
+        ObjectOptimisticLockingFailureException.class,
+        DataIntegrityViolationException.class
+    })
+    public ProblemDetail handleConflictoDeConcurrencia(Exception ex) {
+        log.warn("Conflicto de concurrencia o integridad en inversiones", ex);
+        return problem(
+            HttpStatus.CONFLICT,
+            "CONFLICTO_CONCURRENCIA",
+            "La operación chocó con otro cambio simultáneo. "
+                + "Vuelve a consultar la posición e inténtalo de nuevo.");
     }
 
     @ExceptionHandler(DatosPersistidosInvalidos.class)

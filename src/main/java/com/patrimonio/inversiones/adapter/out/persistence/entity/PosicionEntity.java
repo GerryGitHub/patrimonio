@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -11,9 +12,10 @@ import java.util.UUID;
 /**
  * Mapeo JPA de la tabla {@code posicion}.
  *
- * <p>{@code precio_promedio} representa el costo unitario de la posición
- * inicial. {@code contrato_id} se conserva nulo en esta entrega: los contratos
- * de inversión corresponden a una entrega posterior.</p>
+ * <p>{@code precio_promedio} es una vista del costo unitario.
+ * {@code costo_total} es la magnitud autoritativa del costo de adquisición y
+ * se actualiza transaccionalmente con los movimientos. La columna
+ * {@code version} habilita el bloqueo optimista de JPA.</p>
  */
 @Entity
 @Table(name = "posicion", schema = "public")
@@ -37,6 +39,19 @@ public class PosicionEntity {
 
     @Column(name = "precio_promedio", nullable = false, precision = 24, scale = 8)
     private BigDecimal precioPromedio;
+
+    @Column(name = "costo_total", nullable = false, precision = 28, scale = 10)
+    private BigDecimal costoTotal;
+
+    @Column(name = "resultado_realizado", nullable = false, precision = 28, scale = 10)
+    private BigDecimal resultadoRealizado;
+
+    @Column(name = "fecha_ultimo_movimiento")
+    private Instant fechaUltimoMovimiento;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     @Column(name = "moneda_id", nullable = false)
     private UUID monedaId;
@@ -67,6 +82,9 @@ public class PosicionEntity {
         UUID contratoId,
         BigDecimal cantidad,
         BigDecimal precioPromedio,
+        BigDecimal costoTotal,
+        BigDecimal resultadoRealizado,
+        Instant fechaUltimoMovimiento,
         UUID monedaId,
         String observaciones,
         boolean activo,
@@ -80,6 +98,9 @@ public class PosicionEntity {
         this.contratoId = contratoId;
         this.cantidad = cantidad;
         this.precioPromedio = precioPromedio;
+        this.costoTotal = costoTotal;
+        this.resultadoRealizado = resultadoRealizado;
+        this.fechaUltimoMovimiento = fechaUltimoMovimiento;
         this.monedaId = monedaId;
         this.observaciones = observaciones;
         this.activo = activo;
@@ -91,16 +112,22 @@ public class PosicionEntity {
     public void actualizar(
         BigDecimal cantidad,
         BigDecimal precioPromedio,
+        BigDecimal costoTotal,
+        BigDecimal resultadoRealizado,
         String observaciones,
         boolean activo,
         Instant fechaApertura,
+        Instant fechaUltimoMovimiento,
         Instant fechaActualizacion
     ) {
         this.cantidad = cantidad;
         this.precioPromedio = precioPromedio;
+        this.costoTotal = costoTotal;
+        this.resultadoRealizado = resultadoRealizado;
         this.observaciones = observaciones;
         this.activo = activo;
         this.fechaApertura = fechaApertura;
+        this.fechaUltimoMovimiento = fechaUltimoMovimiento;
         this.fechaActualizacion = fechaActualizacion;
     }
 
@@ -126,6 +153,22 @@ public class PosicionEntity {
 
     public BigDecimal getPrecioPromedio() {
         return precioPromedio;
+    }
+
+    public BigDecimal getCostoTotal() {
+        return costoTotal;
+    }
+
+    public BigDecimal getResultadoRealizado() {
+        return resultadoRealizado;
+    }
+
+    public Instant getFechaUltimoMovimiento() {
+        return fechaUltimoMovimiento;
+    }
+
+    public long getVersion() {
+        return version;
     }
 
     public UUID getMonedaId() {

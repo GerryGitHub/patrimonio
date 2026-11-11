@@ -18,14 +18,6 @@ public interface PosicionRepository {
 
     /**
      * Posiciones de un conjunto de cuentas con filtros opcionales.
-     *
-     * @param cuentaIds cuentas autorizadas del portafolio
-     * @param cuentaId filtro opcional por una cuenta concreta
-     * @param instrumentoId filtro opcional por instrumento
-     * @param instrumentoIdsRestringidos cuando no es {@code null}, limita el
-     *     resultado a esos instrumentos (se usa para filtrar por clase de
-     *     activo)
-     * @param activo filtro opcional por estado
      */
     List<Posicion> listarPorCuentas(
         Collection<UUID> cuentaIds,
@@ -35,6 +27,12 @@ public interface PosicionRepository {
         Boolean activo);
 
     Optional<Posicion> buscarPorId(UUID posicionId);
+
+    /**
+     * Bloquea la posición para actualizarla en la misma transacción que el
+     * movimiento.
+     */
+    Optional<Posicion> buscarPorIdParaActualizar(UUID posicionId);
 
     Posicion guardar(Posicion posicion);
 }

@@ -30,6 +30,7 @@ public class PosicionResponseAssembler {
             texto(vista.cantidad()),
             texto(vista.costoUnitario()),
             texto(vista.costoTotal()),
+            texto(vista.resultadoRealizado()),
             vista.monedaId(),
             vista.monedaCodigo(),
             vista.monedaNombre(),
@@ -38,6 +39,7 @@ public class PosicionResponseAssembler {
             vista.observaciones(),
             vista.activo(),
             vista.fechaApertura(),
+            vista.fechaUltimoMovimiento(),
             vista.fechaCreacion(),
             vista.fechaActualizacion());
     }
@@ -52,6 +54,9 @@ public class PosicionResponseAssembler {
             vista.posicionesActivas(),
             vista.instrumentosDistintos(),
             vista.costoPorMoneda().stream()
+                .map(this::toResponse)
+                .toList(),
+            vista.resultadoPorMoneda().stream()
                 .map(this::toResponse)
                 .toList(),
             vista.distribucionPorCategoria().stream()
@@ -69,6 +74,18 @@ public class PosicionResponseAssembler {
             vista.simbolo(),
             vista.decimales(),
             texto(vista.costo()));
+    }
+
+    private ResumenPosicionesResponse.ResultadoPorMonedaResponse toResponse(
+        ResumenPosicionesView.ResultadoPorMonedaView vista
+    ) {
+        return new ResumenPosicionesResponse.ResultadoPorMonedaResponse(
+            vista.monedaId(),
+            vista.codigo(),
+            vista.nombre(),
+            vista.simbolo(),
+            vista.decimales(),
+            texto(vista.resultado()));
     }
 
     private ResumenPosicionesResponse.DistribucionCategoriaResponse toResponse(

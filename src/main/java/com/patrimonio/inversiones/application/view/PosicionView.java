@@ -8,8 +8,9 @@ import java.util.UUID;
 /**
  * Vista de aplicación de una posición.
  *
- * <p>El costo total es el único importe derivado: {@code cantidad × costo
- * unitario}. No es valor de mercado ni incluye rendimiento.</p>
+ * <p>La cantidad y el costo son el estado materializado derivado de los
+ * movimientos confirmados. El costo total es una magnitud de adquisición, no un
+ * valor de mercado. El resultado realizado solo incluye ventas y reversiones.</p>
  */
 public record PosicionView(
     UUID id,
@@ -25,6 +26,7 @@ public record PosicionView(
     BigDecimal cantidad,
     BigDecimal costoUnitario,
     BigDecimal costoTotal,
+    BigDecimal resultadoRealizado,
     UUID monedaId,
     String monedaCodigo,
     String monedaNombre,
@@ -33,6 +35,7 @@ public record PosicionView(
     String observaciones,
     boolean activo,
     LocalDate fechaApertura,
+    Instant fechaUltimoMovimiento,
     Instant fechaCreacion,
     Instant fechaActualizacion
 ) {

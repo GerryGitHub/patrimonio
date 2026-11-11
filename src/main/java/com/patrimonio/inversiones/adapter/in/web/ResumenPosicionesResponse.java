@@ -7,13 +7,15 @@ import java.util.UUID;
  * DTO de los agregados reales de posiciones de un portafolio.
  *
  * <p>No representa valor de mercado, rendimiento ni patrimonio actualizado.
- * Los importes se agrupan por moneda y viajan como cadena.</p>
+ * Los importes se agrupan por moneda y viajan como cadena. El resultado
+ * realizado puede ser negativo y no incluye resultados no realizados.</p>
  */
 public record ResumenPosicionesResponse(
     int totalPosiciones,
     int posicionesActivas,
     int instrumentosDistintos,
     List<CostoPorMonedaResponse> costoPorMoneda,
+    List<ResultadoPorMonedaResponse> resultadoPorMoneda,
     List<DistribucionCategoriaResponse> distribucionPorCategoria
 ) {
 
@@ -24,6 +26,16 @@ public record ResumenPosicionesResponse(
         String simbolo,
         int decimales,
         String costo
+    ) {
+    }
+
+    public record ResultadoPorMonedaResponse(
+        UUID monedaId,
+        String codigo,
+        String nombre,
+        String simbolo,
+        int decimales,
+        String resultado
     ) {
     }
 

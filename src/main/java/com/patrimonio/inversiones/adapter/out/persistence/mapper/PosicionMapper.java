@@ -14,18 +14,22 @@ public class PosicionMapper {
 
     public Posicion toDomain(PosicionEntity entity) {
         try {
-            return Posicion.reconstruir(
+            return Posicion.reconstruirCompleta(
                 entity.getId(),
                 entity.getCuentaId(),
                 entity.getInstrumentoId(),
                 entity.getCantidad(),
                 entity.getPrecioPromedio(),
+                entity.getCostoTotal(),
+                entity.getResultadoRealizado(),
                 entity.getMonedaId(),
                 entity.getObservaciones(),
                 entity.isActivo(),
                 entity.getFechaApertura(),
+                entity.getFechaUltimoMovimiento(),
                 entity.getFechaCreacion(),
-                entity.getFechaActualizacion());
+                entity.getFechaActualizacion(),
+                entity.getVersion());
         } catch (DomainException ex) {
             throw new DatosPersistidosInvalidos(
                 "La posición almacenada no cumple las invariantes de dominio.",
@@ -41,6 +45,9 @@ public class PosicionMapper {
             null,
             posicion.cantidad(),
             posicion.costoUnitario(),
+            posicion.costoTotal(),
+            posicion.resultadoRealizado(),
+            posicion.fechaUltimoMovimiento().orElse(null),
             posicion.monedaId(),
             posicion.observaciones().orElse(null),
             posicion.activo(),
@@ -53,9 +60,12 @@ public class PosicionMapper {
         entity.actualizar(
             posicion.cantidad(),
             posicion.costoUnitario(),
+            posicion.costoTotal(),
+            posicion.resultadoRealizado(),
             posicion.observaciones().orElse(null),
             posicion.activo(),
             posicion.fechaApertura(),
+            posicion.fechaUltimoMovimiento().orElse(null),
             posicion.fechaActualizacion());
     }
 }

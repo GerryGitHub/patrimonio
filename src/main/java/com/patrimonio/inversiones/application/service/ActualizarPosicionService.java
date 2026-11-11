@@ -5,15 +5,18 @@ import com.patrimonio.cuentas.api.port.CuentaConsultaPort;
 import com.patrimonio.inversiones.application.command.ActualizarPosicionCommand;
 import com.patrimonio.inversiones.application.port.in.ActualizarPosicionUseCase;
 import com.patrimonio.inversiones.application.port.out.InstrumentoRepository;
+import com.patrimonio.inversiones.application.port.out.MovimientoRepository;
 import com.patrimonio.inversiones.application.port.out.PosicionRepository;
 import com.patrimonio.inversiones.application.support.AccesoPortafolioInversiones;
 import com.patrimonio.inversiones.application.support.FechasInversiones;
 import com.patrimonio.inversiones.application.support.InversionesVistas;
 import com.patrimonio.inversiones.application.support.TextosInversiones;
 import com.patrimonio.inversiones.application.view.PosicionView;
+import com.patrimonio.inversiones.domain.error.PosicionConHistorialException;
 import com.patrimonio.inversiones.domain.model.Instrumento;
 import com.patrimonio.inversiones.domain.model.Posicion;
 import com.patrimonio.shared.domain.error.NotFoundException;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Objects;
@@ -34,6 +37,7 @@ public class ActualizarPosicionService implements ActualizarPosicionUseCase {
     private final CuentaConsultaPort cuentas;
     private final InstrumentoRepository instrumentos;
     private final PosicionRepository posiciones;
+    private final MovimientoRepository movimientos;
     private final InversionesVistas vistas;
 
     public ActualizarPosicionService(
@@ -41,12 +45,14 @@ public class ActualizarPosicionService implements ActualizarPosicionUseCase {
         CuentaConsultaPort cuentas,
         InstrumentoRepository instrumentos,
         PosicionRepository posiciones,
+        MovimientoRepository movimientos,
         InversionesVistas vistas
     ) {
         this.accesoPortafolio = accesoPortafolio;
         this.cuentas = cuentas;
         this.instrumentos = instrumentos;
         this.posiciones = posiciones;
+        this.movimientos = movimientos;
         this.vistas = vistas;
     }
 
@@ -76,6 +82,8 @@ public class ActualizarPosicionService implements ActualizarPosicionUseCase {
             ? FechasInversiones.fecha(existente.fechaApertura())
             : command.fechaApertura();
 
+        exigirSinCambiosMaterializados(command, existente);
+
         Posicion actualizada = existente.actualizarDatos(
             command.cantidad(),
             command.costoUnitario(),
@@ -87,5 +95,38 @@ public class ActualizarPosicionService implements ActualizarPosicionUseCase {
             posiciones.guardar(actualizada),
             vistas.instrumento(instrumento),
             cuenta);
+    }
+
+    /**
+     * Con historial confirmado la cantidad y el costo no se editan libremente:
+     * las correcciones se registran con ajustes o reversiones. Se permite
+     * actualizar solo las observaciones.
+     */
+    private void exigirSinCambiosMaterializados(
+        ActualizarPosicionCommand command,
+        Posicion existente
+    ) {
+        if (!movimientos.existePorPosicion(existente.id())) {
+            return;
+        }
+        boolean cambiaCantidad = !mismoValor(
+            command.cantidad(), existente.cantidad());
+        boolean cambiaCosto = !mismoValor(
+            command.costoUnitario(), existente.costoUnitario());
+        boolean cambiaFecha = command.fechaApertura() != null
+            && !command.fechaApertura().equals(
+                FechasInversiones.fecha(existente.fechaApertura()));
+        if (cambiaCantidad || cambiaCosto || cambiaFecha) {
+            throw new PosicionConHistorialException(
+                "La posición tiene movimientos confirmados. Registra un ajuste "
+                    + "o una reversión para corregir cantidad o costo.");
+        }
+    }
+
+    private static boolean mismoValor(BigDecimal actual, BigDecimal nuevo) {
+        if (actual == null || nuevo == null) {
+            return actual == nuevo;
+        }
+        return actual.compareTo(nuevo) == 0;
     }
 }

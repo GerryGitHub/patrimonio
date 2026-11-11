@@ -89,7 +89,7 @@ public class ResumenPosicionesService implements ResumenPosicionesUseCase {
 
         if (activas.isEmpty()) {
             return new ResumenPosicionesView(
-                todas.size(), 0, 0, List.of(), List.of());
+                todas.size(), 0, 0, List.of(), List.of(), List.of());
         }
 
         List<Instrumento> referenciados = instrumentos.buscarPorIds(
@@ -115,10 +115,11 @@ public class ResumenPosicionesService implements ResumenPosicionesUseCase {
             instrumentosDistintos.add(instrumento.id());
             BigDecimal costo = posicion.costoTotal();
 
-            porMoneda.computeIfAbsent(
+            AcumuladoMoneda acumulado = porMoneda.computeIfAbsent(
                 instrumento.monedaId(),
-                id -> new AcumuladoMoneda(instrumento))
-                .sumar(costo);
+                id -> new AcumuladoMoneda(instrumento));
+            acumulado.sumar(costo);
+            acumulado.sumarResultado(posicion.resultadoRealizado());
 
             porClase.computeIfAbsent(
                 instrumento.claseActivoId(),
@@ -131,6 +132,13 @@ public class ResumenPosicionesService implements ResumenPosicionesUseCase {
             .sorted(Comparator.comparing(CostoPorMonedaView::codigo))
             .toList();
 
+        List<ResumenPosicionesView.ResultadoPorMonedaView> resultadoPorMoneda =
+            porMoneda.values().stream()
+                .map(AcumuladoMoneda::vistaResultado)
+                .sorted(Comparator.comparing(
+                    ResumenPosicionesView.ResultadoPorMonedaView::codigo))
+                .toList();
+
         List<DistribucionCategoriaView> distribucion = porClase.values().stream()
             .map(AcumuladoClase::vista)
             .sorted(Comparator.comparing(DistribucionCategoriaView::claseActivoNombre))
@@ -141,17 +149,20 @@ public class ResumenPosicionesService implements ResumenPosicionesUseCase {
             activas.size(),
             instrumentosDistintos.size(),
             costoPorMoneda,
+            resultadoPorMoneda,
             distribucion);
     }
 
     private static ResumenPosicionesView vacio() {
-        return new ResumenPosicionesView(0, 0, 0, List.of(), List.of());
+        return new ResumenPosicionesView(
+            0, 0, 0, List.of(), List.of(), List.of());
     }
 
     private static final class AcumuladoMoneda {
 
         private final InstrumentoView instrumento;
         private BigDecimal costo = BigDecimal.ZERO;
+        private BigDecimal resultado = BigDecimal.ZERO;
 
         private AcumuladoMoneda(InstrumentoView instrumento) {
             this.instrumento = instrumento;
@@ -159,6 +170,10 @@ public class ResumenPosicionesService implements ResumenPosicionesUseCase {
 
         private void sumar(BigDecimal importe) {
             costo = costo.add(importe);
+        }
+
+        private void sumarResultado(BigDecimal importe) {
+            resultado = resultado.add(importe);
         }
 
         private CostoPorMonedaView vista() {
@@ -169,6 +184,16 @@ public class ResumenPosicionesService implements ResumenPosicionesUseCase {
                 instrumento.monedaSimbolo(),
                 instrumento.monedaDecimales(),
                 costo);
+        }
+
+        private ResumenPosicionesView.ResultadoPorMonedaView vistaResultado() {
+            return new ResumenPosicionesView.ResultadoPorMonedaView(
+                instrumento.monedaId(),
+                instrumento.monedaCodigo(),
+                instrumento.monedaNombre(),
+                instrumento.monedaSimbolo(),
+                instrumento.monedaDecimales(),
+                resultado);
         }
     }
 

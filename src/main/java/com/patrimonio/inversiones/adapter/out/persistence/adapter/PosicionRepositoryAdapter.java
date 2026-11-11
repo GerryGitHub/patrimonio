@@ -58,6 +58,12 @@ public class PosicionRepositoryAdapter implements PosicionRepository {
     }
 
     @Override
+    public Optional<Posicion> buscarPorIdParaActualizar(UUID posicionId) {
+        return posiciones.buscarPorIdParaActualizar(posicionId)
+            .map(mapper::toDomain);
+    }
+
+    @Override
     public Posicion guardar(Posicion posicion) {
         Optional<PosicionEntity> existente = posiciones.findById(posicion.id());
         if (existente.isPresent()) {

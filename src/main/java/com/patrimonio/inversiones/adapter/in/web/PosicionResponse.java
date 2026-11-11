@@ -8,8 +8,9 @@ import java.util.UUID;
  * DTO de respuesta de una posición.
  *
  * <p>Los importes viajan como cadena para conservar exactamente la precisión
- * decimal de {@code NUMERIC}. El costo total es {@code cantidad × costo
- * unitario}; no es valor de mercado ni incluye rendimiento.</p>
+ * decimal de {@code NUMERIC}. El costo total es una magnitud de adquisición,
+ * no un valor de mercado. El resultado realizado solo incluye ventas y
+ * reversiones confirmadas.</p>
  */
 public record PosicionResponse(
     UUID id,
@@ -25,6 +26,7 @@ public record PosicionResponse(
     String cantidad,
     String costoUnitario,
     String costoTotal,
+    String resultadoRealizado,
     UUID monedaId,
     String monedaCodigo,
     String monedaNombre,
@@ -33,6 +35,7 @@ public record PosicionResponse(
     String observaciones,
     boolean activo,
     LocalDate fechaApertura,
+    Instant fechaUltimoMovimiento,
     Instant fechaCreacion,
     Instant fechaActualizacion
 ) {

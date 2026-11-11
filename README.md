@@ -40,7 +40,8 @@ patrimonio/
 | `docs/schema-change-proposal-v2.md` / `.sql` | Propuesta v2 corregida (no aplicada) |
 | `docs/backend-bootstrap.md` | Stack, perfiles, variables de entorno, pruebas y comandos del backend |
 | `docs/cuentas-financieras.md` | Endpoint de consulta de cuentas, arquitectura, mapeo, pruebas y limitación de seguridad |
-| `docs/inversiones.md` | Catálogo de instrumentos, posiciones, endpoints, compatibilidad, esquema y pruebas de la Entrega 2 |
+| `docs/inversiones.md` | Catálogo de instrumentos, posiciones, movimientos, endpoints, compatibilidad, esquema y pruebas de las Entregas 2 y 3 |
+| `docs/movimientos.md` | Motor de movimientos, cálculos, idempotencia, concurrencia, reversión, reconstrucción y migración de la Entrega 3 |
 | `docs/seguridad-autenticacion.md` | Estrategia de sesión, CSRF, autorización por membresía, pruebas y limitaciones |
 
 > Las propuestas son documentación de diseño: **no se han ejecutado** contra la
@@ -102,12 +103,20 @@ GET   /api/v1/portafolios/{portafolioId}/posiciones/{id}
 PUT   /api/v1/portafolios/{portafolioId}/posiciones/{id}
 PATCH /api/v1/portafolios/{portafolioId}/posiciones/{id}/estado
 GET   /api/v1/portafolios/{portafolioId}/posiciones/resumen
+GET   /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/movimientos
+POST  /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/movimientos
+GET   /api/v1/portafolios/{portafolioId}/movimientos/{movimientoId}
+POST  /api/v1/portafolios/{portafolioId}/movimientos/{movimientoId}/reversion
+GET   /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/resumen
+POST  /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/reconstruccion
 ```
 
 El catálogo de instrumentos es global y compartido. Las posiciones pertenecen a
-una cuenta del portafolio; el costo total es `cantidad × costo unitario` y no
-representa valor de mercado. Los detalles, reglas de compatibilidad y cambios de
-esquema están en [`docs/inversiones.md`](docs/inversiones.md).
+una cuenta del portafolio y su cantidad/costo es un estado materializado de los
+movimientos confirmados. El costo total es de adquisición y no representa valor
+de mercado. Los detalles, reglas de compatibilidad, cálculos y cambios de esquema
+están en [`docs/inversiones.md`](docs/inversiones.md) y
+[`docs/movimientos.md`](docs/movimientos.md).
 
 `GET /api/v1/monedas` devuelve el catálogo real de monedas activas, ordenado por
 código. Es la única fuente del selector de moneda base: el cliente no mantiene
@@ -173,12 +182,16 @@ psql -v ON_ERROR_STOP=1 -f db/esquema.sql
 psql -v ON_ERROR_STOP=1 -f db/datos-iniciales.sql
 ```
 
-En bases existentes, la Entrega 2 se aplica sin cambios destructivos:
+En bases existentes, las Entregas 2 y 3 se aplican sin cambios destructivos:
 
 ```bash
 psql -v ON_ERROR_STOP=1 -f db/esquema-entrega2.sql
+psql -v ON_ERROR_STOP=1 -f db/esquema-entrega3.sql
 psql -v ON_ERROR_STOP=1 -f db/datos-iniciales.sql
 ```
+
+`db/esquema-entrega3.sql` convierte las posiciones existentes en movimientos
+`APERTURA` de forma idempotente y conserva sus UUID, cantidades, costos y fechas.
 
 | Grupo | Tablas |
 | ----- | ------ |

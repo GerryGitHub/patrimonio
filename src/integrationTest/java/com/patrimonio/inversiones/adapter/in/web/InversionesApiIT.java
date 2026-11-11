@@ -116,6 +116,7 @@ class InversionesApiIT {
 
     @AfterEach
     void limpiarDatosDePrueba() {
+        jdbcTemplate.update("delete from movimiento");
         jdbcTemplate.update("delete from identificador_instrumento");
         jdbcTemplate.update("delete from posicion");
         jdbcTemplate.update("delete from instrumento");
@@ -404,8 +405,8 @@ class InversionesApiIT {
             .andExpect(jsonPath("$.cuentaNombre").value("Cuenta de corretaje"))
             .andExpect(jsonPath("$.instrumentoNombre").value("Apple"))
             .andExpect(jsonPath("$.instrumentoSimbolo").value("AAPL"))
-            .andExpect(jsonPath("$.cantidad").value("10.5"))
-            .andExpect(jsonPath("$.costoUnitario").value("25.75"))
+            .andExpect(jsonPath("$.cantidad").value("10.5000000000"))
+            .andExpect(jsonPath("$.costoUnitario").value("25.75000000"))
             .andExpect(jsonPath("$.costoTotal").value("270.3750000000"))
             .andExpect(jsonPath("$.monedaCodigo").value("USD"))
             .andExpect(jsonPath("$.claseActivoNombre").value("Renta variable"))
@@ -610,7 +611,7 @@ class InversionesApiIT {
                     }
                     """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.cantidad").value("12"))
+            .andExpect(jsonPath("$.cantidad").value("12.0000000000"))
             .andExpect(jsonPath("$.costoTotal").value("258.0000000000"))
             .andExpect(jsonPath("$.observaciones").value("Corregida"));
 

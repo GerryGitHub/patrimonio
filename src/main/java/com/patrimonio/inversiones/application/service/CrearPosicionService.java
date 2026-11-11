@@ -6,6 +6,7 @@ import com.patrimonio.inversiones.application.command.CrearPosicionCommand;
 import com.patrimonio.inversiones.application.port.in.CrearPosicionUseCase;
 import com.patrimonio.inversiones.application.port.out.CatalogoInstrumentoRepository;
 import com.patrimonio.inversiones.application.port.out.InstrumentoRepository;
+import com.patrimonio.inversiones.application.port.out.MovimientoRepository;
 import com.patrimonio.inversiones.application.port.out.PosicionRepository;
 import com.patrimonio.inversiones.application.support.AccesoPortafolioInversiones;
 import com.patrimonio.inversiones.application.support.FechasInversiones;
@@ -16,10 +17,15 @@ import com.patrimonio.inversiones.application.view.PosicionView;
 import com.patrimonio.inversiones.domain.error.PosicionInvalidaException;
 import com.patrimonio.inversiones.domain.model.ClaseActivo;
 import com.patrimonio.inversiones.domain.model.Instrumento;
+import com.patrimonio.inversiones.domain.model.MotorMovimientos;
+import com.patrimonio.inversiones.domain.model.Movimiento;
 import com.patrimonio.inversiones.domain.model.Posicion;
+import com.patrimonio.inversiones.domain.model.SolicitudMovimiento;
 import com.patrimonio.inversiones.domain.model.TipoInstrumento;
+import com.patrimonio.inversiones.domain.model.TipoMovimiento;
 import com.patrimonio.shared.domain.error.DatosPersistidosInvalidos;
 import com.patrimonio.shared.domain.error.NotFoundException;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Objects;
@@ -43,6 +49,8 @@ public class CrearPosicionService implements CrearPosicionUseCase {
     private final InstrumentoRepository instrumentos;
     private final CatalogoInstrumentoRepository catalogo;
     private final PosicionRepository posiciones;
+    private final MovimientoRepository movimientos;
+    private final MotorMovimientos motor;
     private final ValidadorCompatibilidadCuentaInstrumento compatibilidad;
     private final InversionesVistas vistas;
 
@@ -52,6 +60,8 @@ public class CrearPosicionService implements CrearPosicionUseCase {
         InstrumentoRepository instrumentos,
         CatalogoInstrumentoRepository catalogo,
         PosicionRepository posiciones,
+        MovimientoRepository movimientos,
+        MotorMovimientos motor,
         ValidadorCompatibilidadCuentaInstrumento compatibilidad,
         InversionesVistas vistas
     ) {
@@ -60,6 +70,8 @@ public class CrearPosicionService implements CrearPosicionUseCase {
         this.instrumentos = instrumentos;
         this.catalogo = catalogo;
         this.posiciones = posiciones;
+        this.movimientos = movimientos;
+        this.motor = motor;
         this.compatibilidad = compatibilidad;
         this.vistas = vistas;
     }
@@ -93,6 +105,8 @@ public class CrearPosicionService implements CrearPosicionUseCase {
         LocalDate fecha = command.fechaApertura() == null
             ? FechasInversiones.hoy()
             : command.fechaApertura();
+        Instant ahora = Instant.now();
+        String observaciones = TextosInversiones.opcional(command.observaciones());
 
         Posicion posicion = Posicion.crear(
             UUID.randomUUID(),
@@ -101,12 +115,43 @@ public class CrearPosicionService implements CrearPosicionUseCase {
             command.cantidad(),
             command.costoUnitario(),
             instrumento.monedaId(),
-            TextosInversiones.opcional(command.observaciones()),
+            observaciones,
             FechasInversiones.inicioDelDia(fecha),
-            Instant.now());
+            ahora);
+
+        Posicion creada = posiciones.guardar(posicion);
+
+        // El alta de una posición genera su movimiento APERTURA en la misma
+        // transacción. La posición ya nace con el estado resultante, por lo que
+        // el movimiento se registra contra saldos cero y no se vuelve a aplicar.
+        Movimiento apertura = Movimiento.registrar(
+            new SolicitudMovimiento(
+                UUID.randomUUID(),
+                command.portafolioId(),
+                cuenta.id(),
+                creada.id(),
+                instrumento.id(),
+                TipoMovimiento.APERTURA,
+                fecha,
+                null,
+                creada.cantidad(),
+                creada.costoUnitario(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                instrumento.monedaId(),
+                BigDecimal.ONE,
+                null,
+                observaciones,
+                command.usuarioId(),
+                null),
+            BigDecimal.ZERO,
+            BigDecimal.ZERO,
+            motor,
+            ahora);
+        movimientos.guardar(apertura);
 
         return vistas.posicion(
-            posiciones.guardar(posicion),
+            creada,
             vistas.instrumento(instrumento),
             cuenta);
     }

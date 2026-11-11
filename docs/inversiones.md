@@ -1,28 +1,36 @@
-# Catálogo de instrumentos y posiciones (Entrega 2)
+# Catálogo de instrumentos, posiciones y movimientos (Entregas 2 y 3)
 
-Este documento describe el módulo `inversiones` implementado en la Entrega 2:
-catálogo global de instrumentos financieros y posiciones iniciales dentro de
-cuentas financieras. No incluye movimientos, compras, ventas, contratos de
-inversión a plazo ni valuaciones de mercado.
+Este documento describe el módulo `inversiones`. La Entrega 2 incorporó el
+catálogo global de instrumentos y las posiciones iniciales dentro de cuentas
+financieras. La Entrega 3 añadió el motor de movimientos: las posiciones pasan a
+ser un estado materializado derivado de movimientos confirmados. El detalle del
+motor está en [`movimientos.md`](movimientos.md).
+
+No incluye contratos de inversión a plazo ni valuaciones de mercado.
 
 ## Alcance
 
 - Catálogo compartido de instrumentos de renta variable, renta fija y activos
   digitales.
-- Registro de posiciones iniciales con cantidad, costo unitario y fecha de
-  apertura.
+- Registro de posiciones con cantidad, costo y fecha de apertura; el alta genera
+  un movimiento `APERTURA`.
+- Compras, ventas, aperturas y ajustes con historial inmutable.
+- Reversión mediante movimientos compensatorios y reconstrucción desde el
+  historial.
 - Consulta de posiciones por portafolio con filtros por cuenta, instrumento,
   categoría y estado.
-- Agregados de costo por moneda y distribución por categoría para el dashboard.
-- Sin valor de mercado, rendimiento, ganancia/pérdida no realizada ni
-  patrimonio actualizado a precios de mercado.
+- Agregados de costo y resultado realizado por moneda, y distribución por
+  categoría para el dashboard.
+- Sin valor de mercado, rendimiento no realizado ni patrimonio actualizado a
+  precios de mercado.
 
 ## Modelo de dominio
 
 | Concepto | Responsabilidad |
 | --- | --- |
 | `Instrumento` | Activo financiero del catálogo global. Agregado independiente. |
-| `Posicion` | Tenencia inicial de un instrumento dentro de una cuenta. |
+| `Posicion` | Estado materializado de la tenencia dentro de una cuenta. |
+| `Movimiento` | Hecho confirmado e inmutable que modifica la posición. |
 | `ClaseActivo` | Categoría extensible: renta variable, renta fija, activos digitales. |
 | `TipoInstrumento` | Tipo dentro de una clase: acción, ETF, cete, criptomoneda, etc. |
 
@@ -37,14 +45,14 @@ Decisiones relevantes:
   varias cuentas.
 - La moneda de la posición se deriva de la moneda del instrumento; no se solicita
   en el formulario.
-- `posicion.precio_promedio` almacena el costo unitario. El costo total se
-  calcula como `cantidad × costo unitario` y se expone con escala decimal.
+- `posicion.precio_promedio` almacena el costo unitario. El costo total es la
+  magnitud autoritativa y se expone con escala decimal.
 - Los importes y cantidades usan `BigDecimal`/`NUMERIC`; nunca `double` ni
   `float`. Las respuestas JSON serializan estos valores como cadenas para
   conservar la precisión.
-- La cantidad y el costo de una posición se pueden corregir mientras no exista el
-  motor de movimientos. Cuando ese módulo exista, la posición quedará derivada
-  de sus movimientos y esta edición se restringirá.
+- Una posición sin movimientos permite editar cantidad, costo y fecha de
+  apertura. Con historial, esos campos se rechazan con `POSICION_CON_HISTORIAL`;
+  las correcciones se hacen con ajustes o reversiones.
 
 ## Compatibilidad cuenta / instrumento
 
@@ -70,19 +78,23 @@ Se reutilizan las tablas existentes `instrumento`, `identificador_instrumento` y
 - `identificador_instrumento`: índice único parcial para ISIN activo.
 - `posicion`: columna `observaciones`, `fecha_creacion`; restricción
   `ck_posicion_cantidad`; índice `(cuenta_id, instrumento_id)`.
-- `db/datos-iniciales.sql`: semillas idempotentes de clases de activo y tipos de
-  instrumento.
+- Entrega 3: tabla `movimiento`, tipos de movimiento, columnas
+  `resultado_realizado`, `fecha_ultimo_movimiento`, `version` y
+  `costo_total` en `posicion`.
+- `db/datos-iniciales.sql`: semillas idempotentes de clases de activo, tipos de
+  instrumento y tipos de movimiento.
 
 Para una base existente:
 
 ```bash
 psql -v ON_ERROR_STOP=1 -f db/esquema-entrega2.sql
+psql -v ON_ERROR_STOP=1 -f db/esquema-entrega3.sql
 psql -v ON_ERROR_STOP=1 -f db/datos-iniciales.sql
 ```
 
-`db/esquema-entrega2.sql` es aditivo e idempotente. `db/esquema.sql` ya contiene
-el esquema completo para instalaciones nuevas. No se introduce Flyway ni se
-eliminan datos.
+`db/esquema-entrega2.sql` y `db/esquema-entrega3.sql` son aditivos e
+idempotentes. `db/esquema.sql` ya contiene el esquema completo para instalaciones
+nuevas. No se introduce Flyway ni se eliminan datos.
 
 Los pagarés y depósitos a plazo de bancos o SOFIPOs **no** se modelan como
 posiciones bursátiles: corresponden a contratos de inversión en la siguiente
@@ -118,8 +130,24 @@ PATCH /api/v1/portafolios/{portafolioId}/posiciones/{id}/estado
 ```
 
 `POST` y `PUT` de posición no permiten cambiar la cuenta ni el instrumento; solo
-cantidad, costo unitario, fecha de apertura y observaciones. La respuesta incluye
-`costoTotal`, calculado por el backend.
+cantidad, costo unitario, fecha de apertura y observaciones. Con historial, la
+cantidad, el costo y la fecha de apertura quedan bloqueados. La respuesta incluye
+`costoTotal`, `resultadoRealizado` y `fechaUltimoMovimiento`.
+
+### Movimientos
+
+```http
+GET   /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/movimientos
+POST  /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/movimientos
+GET   /api/v1/portafolios/{portafolioId}/movimientos/{movimientoId}
+POST  /api/v1/portafolios/{portafolioId}/movimientos/{movimientoId}/reversion
+GET   /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/resumen
+POST  /api/v1/portafolios/{portafolioId}/posiciones/{posicionId}/reconstruccion
+```
+
+El historial admite filtros por tipo y fechas, paginación y orden. El alta y la
+reversión aceptan idempotencia. Los detalles de reglas, cálculos y errores están
+en [`movimientos.md`](movimientos.md).
 
 ## Seguridad
 
@@ -140,32 +168,37 @@ Pantallas principales:
 - `/instrumentos`: listado, búsqueda, filtros por categoría, tipo y estado, y alta.
 - `/instrumentos/nuevo`, `/instrumentos/{id}`, `/instrumentos/{id}/editar`.
 - `/activos/liquidez/{portafolioId}/posiciones`: listado, filtros, resumen de costo
-  por moneda y distribución.
+  y resultado realizado por moneda y distribución.
 - `/activos/liquidez/{portafolioId}/posiciones/nueva`,
   `.../posiciones/{id}` y `.../posiciones/{id}/editar`.
+- Detalle de posición: métricas separadas de cantidad, costo de adquisición,
+  costo promedio y resultado realizado; historial con filtros, detalle,
+  reversión con confirmación, alta de movimientos y verificación de saldos.
 
 El formulario de posición muestra el costo total como ayuda visual, agrupa los
 instrumentos por categoría y adapta las etiquetas a la categoría seleccionada. El
 costo agregado se presenta siempre por moneda; nunca se suman monedas distintas.
-El dashboard usa posiciones reales para conteos, costo agregado y distribución,
-sin presentar el costo como valor de mercado.
+El dashboard usa posiciones reales para conteos, costo de adquisición, resultado
+realizado y distribución, sin presentar el costo como valor de mercado.
 
 ## Pruebas
 
 - Backend: pruebas unitarias de dominio, servicios y validadores; pruebas de
   integración con PostgreSQL/Testcontainers para instrumentos, posiciones,
-  filtros, duplicados, roles, aislamiento y precisión decimal.
-- Frontend: pruebas de clientes de API, utilidades decimales, combinación de
-  resúmenes, componentes de costo y tabla de posiciones; además de `typecheck` y
+  movimientos, filtros, duplicados, roles, aislamiento, idempotencia,
+  concurrencia, migración y precisión decimal.
+- Frontend: pruebas de clientes de API, utilidades decimales, validaciones,
+  cálculos visuales, combinación de resúmenes, componentes de costo, resultado
+  por moneda, formulario de movimientos e historial; además de `typecheck` y
   `build`.
 
 ## Decisiones pendientes para la siguiente entrega
 
-- Implementar el motor de movimientos (compras, ventas, transferencias) y derivar
-  cantidad/costo de la posición desde ese historial.
 - Modelar contratos de inversión a plazo (pagarés, depósitos) sin mezclarlos con
   posiciones bursátiles.
 - Incorporar cotizaciones y valuaciones históricas para valor de mercado y
-  rendimiento.
+  rendimiento no realizado.
 - Definir una clasificación funcional de tipos de cuenta en el catálogo para
   reemplazar las reglas por nombre.
+- Evaluar transferencias entre cuentas y portafolios como movimientos
+  compensatorios de dos posiciones.

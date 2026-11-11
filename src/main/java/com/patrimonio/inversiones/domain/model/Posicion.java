@@ -8,21 +8,20 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Posición inicial de un instrumento dentro de una cuenta financiera.
+ * Posición de un instrumento dentro de una cuenta financiera.
  *
- * <p>Agregado de dominio puro. La posición pertenece a la cuenta y referencia
- * el instrumento y la moneda por identificador. Una cuenta puede tener varias
- * posiciones y un instrumento puede existir en varias cuentas.</p>
+ * <p>La cantidad y el costo son un estado materializado derivado de los
+ * movimientos confirmados. No se editan libremente cuando la posición tiene
+ * historial. El costo total es la magnitud autoritativa; el costo unitario es
+ * una vista calculada como {@code costo total / cantidad}.</p>
  *
- * <p>En esta entrega la posición se registra con cantidad, costo unitario y
- * fecha de apertura. No se implementan todavía compras, ventas, movimientos ni
- * valuaciones de mercado. El costo total es el único importe derivado y se
- * calcula como {@code cantidad × costo unitario}; no representa valor de
- * mercado ni rendimiento.</p>
+ * <p>El costo no es valor de mercado ni incluye rendimiento no realizado.</p>
  */
 public final class Posicion {
 
     private static final int LONGITUD_MAXIMA_OBSERVACIONES = 500;
+    private static final int ESCALA_CANTIDAD = 10;
+    private static final int ESCALA_COSTO_UNITARIO = 8;
     private static final int ESCALA_COSTO_TOTAL = 10;
 
     private final UUID id;
@@ -30,12 +29,16 @@ public final class Posicion {
     private final UUID instrumentoId;
     private final BigDecimal cantidad;
     private final BigDecimal costoUnitario;
+    private final BigDecimal costoTotal;
+    private final BigDecimal resultadoRealizado;
     private final UUID monedaId;
     private final Optional<String> observaciones;
     private final boolean activo;
     private final Instant fechaApertura;
+    private final Optional<Instant> fechaUltimoMovimiento;
     private final Instant fechaCreacion;
     private final Instant fechaActualizacion;
+    private final long version;
 
     private Posicion(
         UUID id,
@@ -43,28 +46,39 @@ public final class Posicion {
         UUID instrumentoId,
         BigDecimal cantidad,
         BigDecimal costoUnitario,
+        BigDecimal costoTotal,
+        BigDecimal resultadoRealizado,
         UUID monedaId,
         String observaciones,
         boolean activo,
         Instant fechaApertura,
+        Instant fechaUltimoMovimiento,
         Instant fechaCreacion,
-        Instant fechaActualizacion
+        Instant fechaActualizacion,
+        long version
     ) {
         this.id = id;
         this.cuentaId = cuentaId;
         this.instrumentoId = instrumentoId;
-        this.cantidad = cantidad;
-        this.costoUnitario = costoUnitario;
+        this.cantidad = escala(cantidad, ESCALA_CANTIDAD);
+        this.costoUnitario = escala(costoUnitario, ESCALA_COSTO_UNITARIO);
+        this.costoTotal = escala(costoTotal, ESCALA_COSTO_TOTAL);
+        this.resultadoRealizado = escala(
+            resultadoRealizado == null ? BigDecimal.ZERO : resultadoRealizado,
+            ESCALA_COSTO_TOTAL);
         this.monedaId = monedaId;
         this.observaciones = Optional.ofNullable(observaciones);
         this.activo = activo;
         this.fechaApertura = fechaApertura;
+        this.fechaUltimoMovimiento = Optional.ofNullable(fechaUltimoMovimiento);
         this.fechaCreacion = fechaCreacion;
         this.fechaActualizacion = fechaActualizacion;
+        this.version = version;
     }
 
     /**
-     * Crea una posición nueva y activa.
+     * Crea una posición nueva y activa. El alta genera además su movimiento
+     * APERTURA en la capa de aplicación.
      */
     public static Posicion crear(
         UUID id,
@@ -94,17 +108,22 @@ public final class Posicion {
             instrumentoId,
             cantidad,
             costoUnitario,
+            costoTotalDe(cantidad, costoUnitario),
+            BigDecimal.ZERO,
             monedaId,
             observaciones,
             true,
             fechaApertura,
+            fechaApertura,
             ahora,
-            ahora
-        );
+            ahora,
+            0);
     }
 
     /**
-     * Reconstruye una posición desde persistencia validando sus invariantes.
+     * Reconstruye una posición desde persistencia. Conserva la firma histórica
+     * para los llamadores de la Entrega 2; el mapeo nuevo usa
+     * {@link #reconstruirCompleta}.
      */
     public static Posicion reconstruir(
         UUID id,
@@ -119,6 +138,44 @@ public final class Posicion {
         Instant fechaCreacion,
         Instant fechaActualizacion
     ) {
+        return reconstruirCompleta(
+            id,
+            cuentaId,
+            instrumentoId,
+            cantidad,
+            costoUnitario,
+            costoTotalDe(cantidad, costoUnitario),
+            BigDecimal.ZERO,
+            monedaId,
+            observaciones,
+            activo,
+            fechaApertura,
+            null,
+            fechaCreacion,
+            fechaActualizacion,
+            0);
+    }
+
+    /**
+     * Reconstruye el estado materializado completo desde persistencia.
+     */
+    public static Posicion reconstruirCompleta(
+        UUID id,
+        UUID cuentaId,
+        UUID instrumentoId,
+        BigDecimal cantidad,
+        BigDecimal costoUnitario,
+        BigDecimal costoTotal,
+        BigDecimal resultadoRealizado,
+        UUID monedaId,
+        String observaciones,
+        boolean activo,
+        Instant fechaApertura,
+        Instant fechaUltimoMovimiento,
+        Instant fechaCreacion,
+        Instant fechaActualizacion,
+        long version
+    ) {
         requerir(id, "id");
         requerir(cuentaId, "cuentaId");
         requerir(instrumentoId, "instrumentoId");
@@ -128,8 +185,25 @@ public final class Posicion {
         requerir(fechaActualizacion, "fechaActualizacion");
         validarCantidad(cantidad);
         validarCostoUnitario(costoUnitario);
+        validarCostoTotal(costoTotal);
+        validarResultado(resultadoRealizado);
         validarObservaciones(observaciones);
         validarFechaApertura(fechaApertura, fechaActualizacion);
+        if (version < 0) {
+            throw new PosicionInvalidaException(
+                "La versión de la posición no puede ser negativa.");
+        }
+
+        BigDecimal costo = costoTotal;
+        // Compatibilidad con posiciones insertadas antes de la migración, que
+        // no tienen costo_total pero sí cantidad y precio promedio.
+        if (costo == null
+            || (costo.signum() == 0
+                && cantidad.signum() > 0
+                && costoUnitario.signum() > 0
+                && fechaUltimoMovimiento == null)) {
+            costo = costoTotalDe(cantidad, costoUnitario);
+        }
 
         return new Posicion(
             id,
@@ -137,22 +211,24 @@ public final class Posicion {
             instrumentoId,
             cantidad,
             costoUnitario,
+            costo,
+            resultadoRealizado == null ? BigDecimal.ZERO : resultadoRealizado,
             monedaId,
             observaciones,
             activo,
             fechaApertura,
+            fechaUltimoMovimiento,
             fechaCreacion,
-            fechaActualizacion
-        );
+            fechaActualizacion,
+            version);
     }
 
     /**
      * Devuelve una copia con los datos editables actualizados.
      *
-     * <p>Mientras no exista el motor de movimientos, la cantidad y el costo
-     * unitario se pueden corregir. Cuando se implementen los movimientos,
-     * estos campos quedarán derivados de las operaciones y esta edición se
-     * restringirá.</p>
+     * <p>Solo debe usarse cuando la posición no tiene movimientos confirmados.
+     * El caso de uso lo verifica. Cuando hay historial, la cantidad y el costo
+     * se corrigen con movimientos de ajuste o reversión.</p>
      */
     public Posicion actualizarDatos(
         BigDecimal nuevaCantidad,
@@ -168,19 +244,108 @@ public final class Posicion {
         validarObservaciones(nuevasObservaciones);
         validarFechaApertura(nuevaFechaApertura, ahora);
 
+        // Si la cantidad y el costo unitario no cambian, se conserva el costo
+        // total autoritativo para no introducir un residuo por redondeo del
+        // costo unitario derivado.
+        BigDecimal nuevoCostoTotal =
+            nuevaCantidad.compareTo(cantidad) == 0
+                && nuevoCostoUnitario.compareTo(costoUnitario) == 0
+                ? costoTotal
+                : costoTotalDe(nuevaCantidad, nuevoCostoUnitario);
+
         return new Posicion(
             id,
             cuentaId,
             instrumentoId,
             nuevaCantidad,
             nuevoCostoUnitario,
+            nuevoCostoTotal,
+            resultadoRealizado,
             monedaId,
             nuevasObservaciones,
             activo,
             nuevaFechaApertura,
+            fechaUltimoMovimiento.orElse(null),
             fechaCreacion,
-            ahora
-        );
+            ahora,
+            version);
+    }
+
+    /**
+     * Aplica el resultado calculado de un movimiento confirmado.
+     */
+    public Posicion aplicar(
+        ResultadoCalculo resultado,
+        Instant fechaMovimiento,
+        Instant ahora
+    ) {
+        requerir(resultado, "resultado");
+        requerir(fechaMovimiento, "fechaMovimiento");
+        requerir(ahora, "ahora");
+        validarCantidad(resultado.cantidadResultante());
+        validarCostoTotal(resultado.costoResultante());
+
+        BigDecimal nuevoResultado = resultadoRealizado.add(
+            resultado.resultadoRealizado() == null
+                ? BigDecimal.ZERO
+                : resultado.resultadoRealizado());
+        BigDecimal nuevoCostoUnitario = CalculosMovimiento.costoUnitario(
+            resultado.costoResultante(), resultado.cantidadResultante());
+        Instant nuevaFechaUltimo = fechaUltimoMovimiento
+            .filter(actual -> actual.isAfter(fechaMovimiento))
+            .orElse(fechaMovimiento);
+
+        return new Posicion(
+            id,
+            cuentaId,
+            instrumentoId,
+            resultado.cantidadResultante(),
+            nuevoCostoUnitario,
+            resultado.costoResultante(),
+            nuevoResultado,
+            monedaId,
+            observaciones.orElse(null),
+            activo,
+            fechaApertura,
+            nuevaFechaUltimo,
+            fechaCreacion,
+            ahora,
+            version + 1);
+    }
+
+    /**
+     * Repara el estado materializado con los valores reconstruidos desde el
+     * historial. No modifica movimientos.
+     */
+    public Posicion reparar(
+        BigDecimal cantidadCalculada,
+        BigDecimal costoCalculado,
+        BigDecimal resultadoCalculado,
+        Instant fechaUltimoMovimiento,
+        Instant ahora
+    ) {
+        requerir(ahora, "ahora");
+        validarCantidad(cantidadCalculada);
+        validarCostoTotal(costoCalculado);
+        validarResultado(resultadoCalculado);
+
+        return new Posicion(
+            id,
+            cuentaId,
+            instrumentoId,
+            cantidadCalculada,
+            CalculosMovimiento.costoUnitario(
+                costoCalculado, cantidadCalculada),
+            costoCalculado,
+            resultadoCalculado == null ? BigDecimal.ZERO : resultadoCalculado,
+            monedaId,
+            observaciones.orElse(null),
+            activo,
+            fechaApertura,
+            fechaUltimoMovimiento,
+            fechaCreacion,
+            ahora,
+            version + 1);
     }
 
     /**
@@ -194,24 +359,38 @@ public final class Posicion {
             instrumentoId,
             cantidad,
             costoUnitario,
+            costoTotal,
+            resultadoRealizado,
             monedaId,
             observaciones.orElse(null),
             nuevoActivo,
             fechaApertura,
+            fechaUltimoMovimiento.orElse(null),
             fechaCreacion,
-            ahora
-        );
+            ahora,
+            version);
     }
 
     /**
-     * Costo total de la posición.
-     *
-     * <p>Es {@code cantidad × costo unitario}. No es valor de mercado, no
-     * incluye rendimiento y no se actualiza con precios externos.</p>
+     * Costo total de la posición. Es una magnitud de adquisición, no un valor
+     * de mercado.
      */
     public BigDecimal costoTotal() {
+        return costoTotal;
+    }
+
+    private static BigDecimal costoTotalDe(
+        BigDecimal cantidad,
+        BigDecimal costoUnitario
+    ) {
         return cantidad.multiply(costoUnitario).setScale(
             ESCALA_COSTO_TOTAL, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal escala(BigDecimal valor, int escala) {
+        return valor == null
+            ? null
+            : valor.setScale(escala, RoundingMode.HALF_UP);
     }
 
     private static void requerir(Object valor, String campo) {
@@ -241,6 +420,18 @@ public final class Posicion {
             throw new PosicionInvalidaException(
                 "El costo unitario de la posición no puede ser negativo.");
         }
+    }
+
+    private static void validarCostoTotal(BigDecimal costoTotal) {
+        if (costoTotal != null && costoTotal.signum() < 0) {
+            throw new PosicionInvalidaException(
+                "El costo total de la posición no puede ser negativo.");
+        }
+    }
+
+    private static void validarResultado(BigDecimal resultado) {
+        // El resultado realizado puede ser negativo; solo se valida el nulo en
+        // la reconstrucción, donde se normaliza a cero.
     }
 
     private static void validarObservaciones(String observaciones) {
@@ -295,12 +486,24 @@ public final class Posicion {
         return fechaApertura;
     }
 
+    public Optional<Instant> fechaUltimoMovimiento() {
+        return fechaUltimoMovimiento;
+    }
+
     public Instant fechaCreacion() {
         return fechaCreacion;
     }
 
     public Instant fechaActualizacion() {
         return fechaActualizacion;
+    }
+
+    public BigDecimal resultadoRealizado() {
+        return resultadoRealizado;
+    }
+
+    public long version() {
+        return version;
     }
 
     @Override

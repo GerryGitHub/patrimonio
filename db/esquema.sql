@@ -73,6 +73,17 @@ CREATE TABLE tipo_movimiento (
 );
 COMMENT ON TABLE tipo_movimiento IS 'Catalogo de tipos de movimiento (compra, venta, dividendo, etc.)';
 
+-- Tipos que utiliza el motor de posiciones de la Entrega 3. El script es
+-- idempotente para que se pueda aplicar sobre bases ya inicializadas.
+INSERT INTO tipo_movimiento (nombre, categoria, afecta_posicion, descripcion) VALUES
+    ('APERTURA',         'POSICION', true, 'Reconocimiento de una tenencia inicial.'),
+    ('COMPRA',           'POSICION', true, 'Incremento de cantidad y costo de adquisicion.'),
+    ('VENTA',            'POSICION', true, 'Reduccion de cantidad y reconocimiento del resultado realizado.'),
+    ('AJUSTE_POSITIVO',  'POSICION', true, 'Correccion justificada que aumenta cantidad y costo.'),
+    ('AJUSTE_NEGATIVO',  'POSICION', true, 'Correccion justificada que reduce cantidad y costo.'),
+    ('REVERSION',        'POSICION', true, 'Compensacion exacta de un movimiento confirmado.')
+ON CONFLICT (nombre) DO NOTHING;
+
 -- ---------------------------------------------------------------------
 -- 2. Usuarios y portafolios
 -- ---------------------------------------------------------------------
@@ -206,6 +217,10 @@ CREATE TABLE posicion (
     contrato_id         uuid,
     cantidad            numeric(28,10) NOT NULL DEFAULT 0,
     precio_promedio     numeric(24,8) NOT NULL DEFAULT 0,
+    costo_total         numeric(28,10) NOT NULL DEFAULT 0,
+    resultado_realizado numeric(28,10) NOT NULL DEFAULT 0,
+    fecha_ultimo_movimiento timestamptz,
+    version             bigint NOT NULL DEFAULT 0,
     moneda_id           uuid NOT NULL REFERENCES moneda (id) ON DELETE RESTRICT,
     observaciones       varchar(500),
     activo              boolean NOT NULL DEFAULT true,
@@ -214,6 +229,8 @@ CREATE TABLE posicion (
     fecha_actualizacion timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT ck_posicion_cantidad CHECK (cantidad >= 0),
     CONSTRAINT ck_posicion_precio_promedio CHECK (precio_promedio >= 0),
+    CONSTRAINT ck_posicion_costo_total CHECK (costo_total >= 0),
+    CONSTRAINT ck_posicion_version CHECK (version >= 0),
     CONSTRAINT ck_posicion_fechas CHECK (fecha_actualizacion >= fecha_apertura)
 );
 CREATE INDEX idx_posicion_cuenta ON posicion (cuenta_id);
@@ -245,24 +262,69 @@ ALTER TABLE posicion
 CREATE INDEX idx_posicion_contrato ON posicion (contrato_id);
 
 CREATE TABLE movimiento (
-    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    posicion_id        uuid NOT NULL REFERENCES posicion (id) ON DELETE RESTRICT,
-    tipo_movimiento_id uuid NOT NULL REFERENCES tipo_movimiento (id) ON DELETE RESTRICT,
-    fecha_operacion    date NOT NULL,
-    cantidad           numeric(28,10) NOT NULL,
-    precio             numeric(24,8) NOT NULL,
-    importe            numeric(24,8) NOT NULL,
-    moneda_id          uuid NOT NULL REFERENCES moneda (id) ON DELETE RESTRICT,
-    comision           numeric(20,8) NOT NULL DEFAULT 0,
-    descripcion        varchar(500),
-    fecha_creacion     timestamptz NOT NULL DEFAULT now(),
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    portafolio_id         uuid NOT NULL REFERENCES portafolio (id) ON DELETE RESTRICT,
+    cuenta_id             uuid NOT NULL REFERENCES cuenta_financiera (id) ON DELETE RESTRICT,
+    posicion_id           uuid NOT NULL REFERENCES posicion (id) ON DELETE RESTRICT,
+    instrumento_id        uuid NOT NULL REFERENCES instrumento (id) ON DELETE RESTRICT,
+    tipo_movimiento_id    uuid NOT NULL REFERENCES tipo_movimiento (id) ON DELETE RESTRICT,
+    fecha_operacion       date NOT NULL,
+    fecha_liquidacion     date,
+    cantidad              numeric(28,10) NOT NULL,
+    precio                numeric(24,8) NOT NULL,
+    importe               numeric(28,10) NOT NULL,
+    moneda_id             uuid NOT NULL REFERENCES moneda (id) ON DELETE RESTRICT,
+    comision              numeric(20,10) NOT NULL DEFAULT 0,
+    impuestos             numeric(20,10) NOT NULL DEFAULT 0,
+    tipo_cambio           numeric(20,10) NOT NULL DEFAULT 1,
+    importe_neto          numeric(28,10) NOT NULL DEFAULT 0,
+    costo_aplicado        numeric(28,10) NOT NULL DEFAULT 0,
+    resultado_realizado   numeric(28,10),
+    efecto_cantidad       numeric(28,10) NOT NULL DEFAULT 0,
+    efecto_costo          numeric(28,10) NOT NULL DEFAULT 0,
+    cantidad_resultante   numeric(28,10) NOT NULL DEFAULT 0,
+    costo_resultante      numeric(28,10) NOT NULL DEFAULT 0,
+    estado                varchar(30) NOT NULL DEFAULT 'CONFIRMADO',
+    usuario_id            uuid REFERENCES usuario (id) ON DELETE RESTRICT,
+    clave_idempotencia    varchar(100),
+    movimiento_origen_id  uuid REFERENCES movimiento (id) ON DELETE RESTRICT,
+    descripcion           varchar(500),
+    fecha_creacion        timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT ck_movimiento_cantidad CHECK (cantidad >= 0),
     CONSTRAINT ck_movimiento_precio CHECK (precio >= 0),
-    CONSTRAINT ck_movimiento_comision CHECK (comision >= 0)
+    CONSTRAINT ck_movimiento_importe CHECK (importe >= 0),
+    CONSTRAINT ck_movimiento_comision CHECK (comision >= 0),
+    CONSTRAINT ck_movimiento_impuestos CHECK (impuestos >= 0),
+    CONSTRAINT ck_movimiento_tipo_cambio CHECK (tipo_cambio > 0),
+    CONSTRAINT ck_movimiento_importe_neto CHECK (importe_neto >= 0),
+    CONSTRAINT ck_movimiento_costo_aplicado CHECK (costo_aplicado >= 0),
+    CONSTRAINT ck_movimiento_efecto_cantidad CHECK (efecto_cantidad <> 0 OR cantidad = 0),
+    CONSTRAINT ck_movimiento_estado CHECK (estado IN ('CONFIRMADO')),
+    CONSTRAINT ck_movimiento_reversion CHECK (
+        (movimiento_origen_id IS NULL AND estado = 'CONFIRMADO')
+        OR movimiento_origen_id IS NOT NULL
+    ),
+    CONSTRAINT ck_movimiento_liquidacion CHECK (
+        fecha_liquidacion IS NULL OR fecha_liquidacion >= fecha_operacion
+    )
 );
 CREATE INDEX idx_movimiento_posicion ON movimiento (posicion_id);
 CREATE INDEX idx_movimiento_tipo ON movimiento (tipo_movimiento_id);
 CREATE INDEX idx_movimiento_moneda ON movimiento (moneda_id);
 CREATE INDEX idx_movimiento_fecha ON movimiento (fecha_operacion);
+CREATE INDEX idx_movimiento_portafolio_fecha
+    ON movimiento (portafolio_id, fecha_operacion DESC, fecha_creacion DESC);
+CREATE INDEX idx_movimiento_posicion_fecha
+    ON movimiento (posicion_id, fecha_operacion DESC, fecha_creacion DESC);
+CREATE INDEX idx_movimiento_usuario ON movimiento (usuario_id);
+-- Un movimiento confirmado solo puede revertirse una vez.
+CREATE UNIQUE INDEX uq_movimiento_reversion
+    ON movimiento (movimiento_origen_id)
+    WHERE movimiento_origen_id IS NOT NULL;
+-- Idempotencia por portafolio: un reintento con la misma clave no duplica.
+CREATE UNIQUE INDEX uq_movimiento_idempotencia
+    ON movimiento (portafolio_id, clave_idempotencia)
+    WHERE clave_idempotencia IS NOT NULL;
 
 -- ---------------------------------------------------------------------
 -- 6. Rendimientos (intereses y pagos)

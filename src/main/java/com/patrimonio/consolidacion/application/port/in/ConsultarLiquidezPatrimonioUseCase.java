@@ -8,5 +8,5 @@ import com.patrimonio.consolidacion.application.view.PatrimonioViews.LiquidezVie
  */
 public interface ConsultarLiquidezPatrimonioUseCase {
 
-    LiquidezView liquidez(ConsultarPatrimonioQuery query);
+    LiquidezView execute(ConsultarPatrimonioQuery query);
 }

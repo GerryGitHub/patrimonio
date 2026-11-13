@@ -6,9 +6,9 @@ import com.patrimonio.cuentas.application.port.out.CuentaFinancieraRepository;
 import com.patrimonio.cuentas.application.support.AccesoPortafolio;
 import com.patrimonio.cuentas.application.support.Cuentas;
 import com.patrimonio.cuentas.application.support.Textos;
+import com.patrimonio.cuentas.application.support.ValidadorReferenciaCuenta;
 import com.patrimonio.cuentas.application.support.ValidadorRelacionesCuenta;
 import com.patrimonio.cuentas.application.view.CuentaFinancieraView;
-import com.patrimonio.cuentas.domain.error.CuentaDuplicadaException;
 import com.patrimonio.cuentas.domain.model.CuentaFinanciera;
 import com.patrimonio.cuentas.domain.model.NumeroCuenta;
 import java.util.Objects;
@@ -32,15 +32,18 @@ public class ActualizarCuentaService implements ActualizarCuentaUseCase {
     private final AccesoPortafolio accesoPortafolio;
     private final CuentaFinancieraRepository cuentas;
     private final ValidadorRelacionesCuenta validador;
+    private final ValidadorReferenciaCuenta validadorReferencia;
 
     public ActualizarCuentaService(
         AccesoPortafolio accesoPortafolio,
         CuentaFinancieraRepository cuentas,
-        ValidadorRelacionesCuenta validador
+        ValidadorRelacionesCuenta validador,
+        ValidadorReferenciaCuenta validadorReferencia
     ) {
         this.accesoPortafolio = accesoPortafolio;
         this.cuentas = cuentas;
         this.validador = validador;
+        this.validadorReferencia = validadorReferencia;
     }
 
     @Override
@@ -59,19 +62,8 @@ public class ActualizarCuentaService implements ActualizarCuentaUseCase {
             command.tipoCuentaId(),
             command.monedaId());
 
-        String numero = Textos.referencia(command.numeroCuenta());
-        if (numero == null) {
-            // La API solo entrega la referencia enmascarada. Si el formulario
-            // no envía una nueva, se conserva la existente.
-            numero = existente.numeroCuenta()
-                .map(NumeroCuenta::valor)
-                .orElse(null);
-        }
-        if (numero != null && cuentas.existeNumeroEnInstitucion(
-            command.institucionId(), numero, command.cuentaId())) {
-            throw new CuentaDuplicadaException(
-                "Ya existe una cuenta con ese número en la institución.");
-        }
+        String numero = validadorReferencia.resolver(
+            command.numeroCuenta(), command.institucionId(), existente);
 
         CuentaFinanciera actualizada = existente.actualizarDatos(
             command.institucionId(),

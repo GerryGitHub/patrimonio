@@ -8,5 +8,5 @@ import com.patrimonio.consolidacion.application.view.PatrimonioViews.CentroView;
  */
 public interface ConsultarCentroPatrimonioUseCase {
 
-    CentroView centro(ConsultarPatrimonioQuery query);
+    CentroView execute(ConsultarPatrimonioQuery query);
 }

@@ -15,6 +15,7 @@ import com.patrimonio.cuentas.application.command.CambiarEstadoCuentaCommand;
 import com.patrimonio.cuentas.application.command.CrearCuentaCommand;
 import com.patrimonio.cuentas.application.port.out.CuentaFinancieraRepository;
 import com.patrimonio.cuentas.application.support.AccesoPortafolio;
+import com.patrimonio.cuentas.application.support.ValidadorReferenciaCuenta;
 import com.patrimonio.cuentas.application.support.ValidadorRelacionesCuenta;
 import com.patrimonio.cuentas.application.view.CuentaFinancieraView;
 import com.patrimonio.cuentas.domain.error.CuentaDuplicadaException;
@@ -67,8 +68,12 @@ class CuentaFinancieraCommandServicesTest {
     @BeforeEach
     void setUp() {
         AccesoPortafolio accesoPortafolio = new AccesoPortafolio(accesoQueryPort);
-        crear = new CrearCuentaService(accesoPortafolio, cuentas, validador);
-        actualizar = new ActualizarCuentaService(accesoPortafolio, cuentas, validador);
+        ValidadorReferenciaCuenta validadorReferencia =
+            new ValidadorReferenciaCuenta(cuentas);
+        crear = new CrearCuentaService(
+            accesoPortafolio, cuentas, validador, validadorReferencia);
+        actualizar = new ActualizarCuentaService(
+            accesoPortafolio, cuentas, validador, validadorReferencia);
         cambiarEstado = new CambiarEstadoCuentaService(accesoPortafolio, cuentas);
     }
 

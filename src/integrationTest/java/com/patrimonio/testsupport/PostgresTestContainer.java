@@ -28,7 +28,9 @@ public final class PostgresTestContainer {
             .withDatabaseName(BASE_DE_DATOS)
             .withUsername(USUARIO)
             .withPassword(CONTRASENA)
-            .withStartupTimeout(Duration.ofMinutes(3))
+            // Docker Desktop en Windows puede tardar varios minutos en
+            // inicializar el clúster bajo carga; 3 minutos resultan escasos.
+            .withStartupTimeout(Duration.ofMinutes(6))
             .withInitScript("esquema.sql");
     }
 }

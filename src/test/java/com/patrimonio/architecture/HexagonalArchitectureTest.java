@@ -4,10 +4,18 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
+import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.RestController;
@@ -147,6 +155,49 @@ class HexagonalArchitectureTest {
             .should().dependOnClassesThat().resideInAnyPackage(
                 "org.springframework.data..", "jakarta.persistence..")
             .because("el controlador no debe acceder directamente a la persistencia");
+
+        regla.check(CLASES);
+    }
+
+    @Test
+    void lasImplementacionesDePuertosDeEntradaExponenExecute() {
+        ArchCondition<JavaClass> exponerExecute =
+            new ArchCondition<>("exponer un único método público execute") {
+                @Override
+                public void check(JavaClass item, ConditionEvents events) {
+                    List<JavaMethod> publicos = item.getMethods().stream()
+                        .filter(metodo -> metodo.getModifiers()
+                            .contains(JavaModifier.PUBLIC))
+                        .toList();
+                    long executes = publicos.stream()
+                        .filter(metodo -> metodo.getName().equals("execute"))
+                        .count();
+                    if (executes != 1) {
+                        events.add(SimpleConditionEvent.violated(
+                            item,
+                            item.getName() + " declara " + executes
+                                + " métodos públicos execute(); se esperaba 1"));
+                    } else if (publicos.size() != 1) {
+                        events.add(SimpleConditionEvent.violated(
+                            item,
+                            item.getName() + " expone otros métodos públicos "
+                                + "además de execute()"));
+                    }
+                }
+            };
+
+        ArchRule regla = classes()
+            .that().implement(DescribedPredicate.describe(
+                "un puerto de entrada",
+                clase -> clase.isInterface()
+                    && clase.getPackageName()
+                        .startsWith("com.patrimonio.")
+                    && clase.getPackageName()
+                        .contains(".application.port.in")))
+            .and().areNotInterfaces()
+            .should(exponerExecute)
+            .because("cada implementación de un puerto de entrada debe "
+                + "exponer un único método público execute()");
 
         regla.check(CLASES);
     }

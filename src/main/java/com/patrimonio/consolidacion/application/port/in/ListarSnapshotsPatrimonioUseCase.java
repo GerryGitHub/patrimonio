@@ -9,5 +9,5 @@ import java.util.List;
  */
 public interface ListarSnapshotsPatrimonioUseCase {
 
-    List<SnapshotView> listar(ConsultarSnapshotsQuery query);
+    List<SnapshotView> execute(ConsultarSnapshotsQuery query);
 }

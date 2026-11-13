@@ -8,8 +8,9 @@ import com.patrimonio.inversiones.application.port.in.ActualizarInstrumentoUseCa
 import com.patrimonio.inversiones.application.port.in.CambiarEstadoInstrumentoUseCase;
 import com.patrimonio.inversiones.application.port.in.ConsultarInstrumentoUseCase;
 import com.patrimonio.inversiones.application.port.in.CrearInstrumentoUseCase;
-import com.patrimonio.inversiones.application.port.in.ListarCatalogoInstrumentosUseCase;
+import com.patrimonio.inversiones.application.port.in.ListarClasesActivoUseCase;
 import com.patrimonio.inversiones.application.port.in.ListarInstrumentosUseCase;
+import com.patrimonio.inversiones.application.port.in.ListarTiposInstrumentoUseCase;
 import com.patrimonio.inversiones.application.query.ConsultarInstrumentoQuery;
 import com.patrimonio.inversiones.application.query.ListarInstrumentosQuery;
 import com.patrimonio.inversiones.application.view.ClaseActivoView;
@@ -57,7 +58,8 @@ public class InstrumentoController {
     private final CrearInstrumentoUseCase crearInstrumento;
     private final ActualizarInstrumentoUseCase actualizarInstrumento;
     private final CambiarEstadoInstrumentoUseCase cambiarEstadoInstrumento;
-    private final ListarCatalogoInstrumentosUseCase listarCatalogo;
+    private final ListarClasesActivoUseCase listarClases;
+    private final ListarTiposInstrumentoUseCase listarTipos;
     private final InstrumentoResponseAssembler assembler;
 
     public InstrumentoController(
@@ -66,7 +68,8 @@ public class InstrumentoController {
         CrearInstrumentoUseCase crearInstrumento,
         ActualizarInstrumentoUseCase actualizarInstrumento,
         CambiarEstadoInstrumentoUseCase cambiarEstadoInstrumento,
-        ListarCatalogoInstrumentosUseCase listarCatalogo,
+        ListarClasesActivoUseCase listarClases,
+        ListarTiposInstrumentoUseCase listarTipos,
         InstrumentoResponseAssembler assembler
     ) {
         this.listarInstrumentos = listarInstrumentos;
@@ -74,7 +77,8 @@ public class InstrumentoController {
         this.crearInstrumento = crearInstrumento;
         this.actualizarInstrumento = actualizarInstrumento;
         this.cambiarEstadoInstrumento = cambiarEstadoInstrumento;
-        this.listarCatalogo = listarCatalogo;
+        this.listarClases = listarClases;
+        this.listarTipos = listarTipos;
         this.assembler = assembler;
     }
 
@@ -94,14 +98,14 @@ public class InstrumentoController {
 
     @GetMapping("/categorias")
     public ResponseEntity<List<ClaseActivoView>> listarCategorias() {
-        return ResponseEntity.ok(listarCatalogo.listarClases());
+        return ResponseEntity.ok(listarClases.execute());
     }
 
     @GetMapping("/tipos")
     public ResponseEntity<List<TipoInstrumentoView>> listarTipos(
         @RequestParam(name = "claseActivoId", required = false) UUID claseActivoId
     ) {
-        return ResponseEntity.ok(listarCatalogo.listarTipos(claseActivoId));
+        return ResponseEntity.ok(listarTipos.execute(claseActivoId));
     }
 
     @GetMapping("/{instrumentoId}")

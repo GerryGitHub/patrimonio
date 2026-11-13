@@ -9,5 +9,5 @@ import java.util.List;
  */
 public interface CrearSnapshotPatrimonioUseCase {
 
-    List<SnapshotView> crear(CrearSnapshotPatrimonioCommand command);
+    List<SnapshotView> execute(CrearSnapshotPatrimonioCommand command);
 }

@@ -6,9 +6,9 @@ import com.patrimonio.cuentas.application.port.out.CuentaFinancieraRepository;
 import com.patrimonio.cuentas.application.support.AccesoPortafolio;
 import com.patrimonio.cuentas.application.support.Cuentas;
 import com.patrimonio.cuentas.application.support.Textos;
+import com.patrimonio.cuentas.application.support.ValidadorReferenciaCuenta;
 import com.patrimonio.cuentas.application.support.ValidadorRelacionesCuenta;
 import com.patrimonio.cuentas.application.view.CuentaFinancieraView;
-import com.patrimonio.cuentas.domain.error.CuentaDuplicadaException;
 import com.patrimonio.cuentas.domain.model.CuentaFinanciera;
 import com.patrimonio.cuentas.domain.model.NumeroCuenta;
 import java.util.Objects;
@@ -30,15 +30,18 @@ public class CrearCuentaService implements CrearCuentaUseCase {
     private final AccesoPortafolio accesoPortafolio;
     private final CuentaFinancieraRepository cuentas;
     private final ValidadorRelacionesCuenta validador;
+    private final ValidadorReferenciaCuenta validadorReferencia;
 
     public CrearCuentaService(
         AccesoPortafolio accesoPortafolio,
         CuentaFinancieraRepository cuentas,
-        ValidadorRelacionesCuenta validador
+        ValidadorRelacionesCuenta validador,
+        ValidadorReferenciaCuenta validadorReferencia
     ) {
         this.accesoPortafolio = accesoPortafolio;
         this.cuentas = cuentas;
         this.validador = validador;
+        this.validadorReferencia = validadorReferencia;
     }
 
     @Override
@@ -54,12 +57,8 @@ public class CrearCuentaService implements CrearCuentaUseCase {
             command.tipoCuentaId(),
             command.monedaId());
 
-        String numero = Textos.referencia(command.numeroCuenta());
-        if (numero != null && cuentas.existeNumeroEnInstitucion(
-            command.institucionId(), numero, null)) {
-            throw new CuentaDuplicadaException(
-                "Ya existe una cuenta con ese número en la institución.");
-        }
+        String numero = validadorReferencia.resolver(
+            command.numeroCuenta(), command.institucionId(), null);
 
         CuentaFinanciera cuenta = CuentaFinanciera.crear(
             UUID.randomUUID(),

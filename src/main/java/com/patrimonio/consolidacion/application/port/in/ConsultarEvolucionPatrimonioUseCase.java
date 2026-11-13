@@ -8,5 +8,5 @@ import com.patrimonio.consolidacion.application.view.PatrimonioViews.EvolucionVi
  */
 public interface ConsultarEvolucionPatrimonioUseCase {
 
-    EvolucionView evolucion(ConsultarPatrimonioQuery query);
+    EvolucionView execute(ConsultarPatrimonioQuery query);
 }

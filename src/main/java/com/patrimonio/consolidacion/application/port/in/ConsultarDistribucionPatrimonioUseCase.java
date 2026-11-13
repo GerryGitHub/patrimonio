@@ -8,5 +8,5 @@ import com.patrimonio.consolidacion.application.view.PatrimonioViews.Distribucio
  */
 public interface ConsultarDistribucionPatrimonioUseCase {
 
-    DistribucionView distribucion(ConsultarPatrimonioQuery query);
+    DistribucionView execute(ConsultarPatrimonioQuery query);
 }

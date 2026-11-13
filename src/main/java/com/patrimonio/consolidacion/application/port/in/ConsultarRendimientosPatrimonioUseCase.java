@@ -8,5 +8,5 @@ import com.patrimonio.consolidacion.application.view.PatrimonioViews.Rendimiento
  */
 public interface ConsultarRendimientosPatrimonioUseCase {
 
-    RendimientosView rendimientos(ConsultarPatrimonioQuery query);
+    RendimientosView execute(ConsultarPatrimonioQuery query);
 }

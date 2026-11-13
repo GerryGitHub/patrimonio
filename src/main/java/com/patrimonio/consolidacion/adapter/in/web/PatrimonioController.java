@@ -104,7 +104,7 @@ public class PatrimonioController {
         @RequestParam(name = "hasta", required = false) LocalDate hasta,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.centro(centro.centro(
+        return ResponseEntity.ok(assembler.centro(centro.execute(
             query(usuario, portafolioId, moneda, periodo, dimension, desde, hasta))));
     }
 
@@ -114,7 +114,7 @@ public class PatrimonioController {
         @RequestParam(name = "moneda", required = false) String moneda,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.resumen(resumen.resumen(
+        return ResponseEntity.ok(assembler.resumen(resumen.execute(
             ConsultarPatrimonioQuery.centro(
                 usuario.id(),
                 portafolioId,
@@ -129,7 +129,7 @@ public class PatrimonioController {
         @RequestParam(name = "dimension", required = false) String dimension,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.distribucion(distribucion.distribucion(
+        return ResponseEntity.ok(assembler.distribucion(distribucion.execute(
             new ConsultarPatrimonioQuery(
                 usuario.id(),
                 portafolioId,
@@ -149,7 +149,7 @@ public class PatrimonioController {
         @RequestParam(name = "hasta", required = false) LocalDate hasta,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.evolucion(evolucion.evolucion(
+        return ResponseEntity.ok(assembler.evolucion(evolucion.execute(
             query(usuario, portafolioId, moneda, periodo, null, desde, hasta))));
     }
 
@@ -162,7 +162,7 @@ public class PatrimonioController {
         @RequestParam(name = "hasta", required = false) LocalDate hasta,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.rendimientos(rendimientos.rendimientos(
+        return ResponseEntity.ok(assembler.rendimientos(rendimientos.execute(
             query(usuario, portafolioId, moneda, periodo, null, desde, hasta))));
     }
 
@@ -172,7 +172,7 @@ public class PatrimonioController {
         @RequestParam(name = "moneda", required = false) String moneda,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.liquidez(liquidez.liquidez(
+        return ResponseEntity.ok(assembler.liquidez(liquidez.execute(
             ConsultarPatrimonioQuery.centro(
                 usuario.id(),
                 portafolioId,
@@ -188,7 +188,7 @@ public class PatrimonioController {
         @RequestParam(name = "hasta", required = false) LocalDate hasta,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.eventos(eventos.eventos(
+        return ResponseEntity.ok(assembler.eventos(eventos.execute(
             new ConsultarPatrimonioQuery(
                 usuario.id(),
                 portafolioId,
@@ -205,7 +205,7 @@ public class PatrimonioController {
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
         return ResponseEntity.ok(listarSnapshots
-            .listar(new ConsultarSnapshotsQuery(usuario.id(), portafolioId))
+            .execute(new ConsultarSnapshotsQuery(usuario.id(), portafolioId))
             .stream()
             .map(assembler::snapshot)
             .toList());
@@ -218,7 +218,7 @@ public class PatrimonioController {
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
         List<SnapshotResponse> creados = crearSnapshot
-            .crear(new CrearSnapshotPatrimonioCommand(
+            .execute(new CrearSnapshotPatrimonioCommand(
                 usuario.id(),
                 portafolioId,
                 request == null ? null : request.fecha()))

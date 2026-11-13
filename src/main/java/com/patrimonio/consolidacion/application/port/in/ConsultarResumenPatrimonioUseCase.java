@@ -8,5 +8,5 @@ import com.patrimonio.consolidacion.application.view.PatrimonioViews.ResumenView
  */
 public interface ConsultarResumenPatrimonioUseCase {
 
-    ResumenView resumen(ConsultarPatrimonioQuery query);
+    ResumenView execute(ConsultarPatrimonioQuery query);
 }

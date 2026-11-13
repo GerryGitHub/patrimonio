@@ -8,5 +8,5 @@ import com.patrimonio.consolidacion.application.view.PatrimonioViews.EventosView
  */
 public interface ConsultarEventosPatrimonioUseCase {
 
-    EventosView eventos(ConsultarPatrimonioQuery query);
+    EventosView execute(ConsultarPatrimonioQuery query);
 }

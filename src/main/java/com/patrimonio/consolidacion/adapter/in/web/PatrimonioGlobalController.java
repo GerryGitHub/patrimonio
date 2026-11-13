@@ -85,7 +85,7 @@ public class PatrimonioGlobalController {
         @RequestParam(name = "hasta", required = false) LocalDate hasta,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.centro(centro.centro(
+        return ResponseEntity.ok(assembler.centro(centro.execute(
             query(usuario, moneda, periodo, dimension, desde, hasta))));
     }
 
@@ -94,7 +94,7 @@ public class PatrimonioGlobalController {
         @RequestParam(name = "moneda", required = false) String moneda,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.resumen(resumen.resumen(
+        return ResponseEntity.ok(assembler.resumen(resumen.execute(
             ConsultarPatrimonioQuery.centro(
                 usuario.id(),
                 null,
@@ -108,7 +108,7 @@ public class PatrimonioGlobalController {
         @RequestParam(name = "dimension", required = false) String dimension,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.distribucion(distribucion.distribucion(
+        return ResponseEntity.ok(assembler.distribucion(distribucion.execute(
             new ConsultarPatrimonioQuery(
                 usuario.id(),
                 null,
@@ -127,7 +127,7 @@ public class PatrimonioGlobalController {
         @RequestParam(name = "hasta", required = false) LocalDate hasta,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.evolucion(evolucion.evolucion(
+        return ResponseEntity.ok(assembler.evolucion(evolucion.execute(
             query(usuario, moneda, periodo, null, desde, hasta))));
     }
 
@@ -139,7 +139,7 @@ public class PatrimonioGlobalController {
         @RequestParam(name = "hasta", required = false) LocalDate hasta,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.rendimientos(rendimientos.rendimientos(
+        return ResponseEntity.ok(assembler.rendimientos(rendimientos.execute(
             query(usuario, moneda, periodo, null, desde, hasta))));
     }
 
@@ -148,7 +148,7 @@ public class PatrimonioGlobalController {
         @RequestParam(name = "moneda", required = false) String moneda,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.liquidez(liquidez.liquidez(
+        return ResponseEntity.ok(assembler.liquidez(liquidez.execute(
             ConsultarPatrimonioQuery.centro(
                 usuario.id(),
                 null,
@@ -163,7 +163,7 @@ public class PatrimonioGlobalController {
         @RequestParam(name = "hasta", required = false) LocalDate hasta,
         @AuthenticationPrincipal UsuarioAutenticado usuario
     ) {
-        return ResponseEntity.ok(assembler.eventos(eventos.eventos(
+        return ResponseEntity.ok(assembler.eventos(eventos.execute(
             new ConsultarPatrimonioQuery(
                 usuario.id(),
                 null,
